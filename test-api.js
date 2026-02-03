@@ -3,9 +3,10 @@
 import { generateSyllabus, generateQuiz, generateFlashcards } from './server/src/services/generator.js';
 import { readFileSync } from 'fs';
 
-// Set env variable directly
-process.env.AI_PROVIDER = 'gemini';
-process.env.GEMINI_API_KEY = 'AIzaSyBk4Slqp-oUdNAbSUcZSpVI8pomVw7FqVg';
+// Set env variables for testing
+// IMPORTANT: Never commit API keys! Use environment variables or .env files
+process.env.AI_PROVIDER = process.env.AI_PROVIDER || 'ollama';
+process.env.GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
 
 console.log('🧪 Testing StudyForge Generation APIs\n');
 console.log('='.repeat(50));
