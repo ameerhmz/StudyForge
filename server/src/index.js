@@ -34,11 +34,13 @@ import uploadRoutes from './routes/upload.js';
 import chatRoutes from './routes/chat.js';
 import generateRoutes from './routes/generate.js';
 import progressRoutes from './routes/progress.js';
+import teacherRoutes from './routes/teacher.js';
 
 app.use('/api/upload', uploadRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/generate', generateRoutes);
 app.use('/api/progress', progressRoutes);
+app.use('/api/teacher', teacherRoutes);
 
 // Global error handler
 app.use((err, req, res, next) => {
