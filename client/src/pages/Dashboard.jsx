@@ -1,26 +1,35 @@
-import { Link, useNavigate } from 'react-router-dom'
-import { useState } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { Link, useNavigate } from 'react-router-dom';
+import { useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Sparkles, Plus, Trash2, GraduationCap, 
   BarChart3, Target, Layers, ArrowRight, X,
-  Upload, Settings as SettingsIcon
-} from 'lucide-react'
-import { cn } from '../lib/utils'
-import useStore from '../store/useStore'
-import { demoSubjects } from '../lib/demoData'
-import PDFUpload from '../components/PDFUpload'
-import Settings from '../components/Settings'
+  Upload, Settings as SettingsIcon, LogOut, Crown
+} from 'lucide-react';
+import { cn } from '../lib/utils';
+import useStore from '../store/useStore';
+import useAuthStore from '../store/useAuthStore';
+import { demoSubjects } from '../lib/demoData';
+import PDFUpload from '../components/PDFUpload';
+import Settings from '../components/Settings';
+import TeacherUpgradeModal from '../components/TeacherUpgradeModal';
 
 export default function Dashboard() {
-  const navigate = useNavigate()
-  const { subjects, addSubject, removeSubject, setCurrentSubject, getStats } = useStore()
-  const [showModal, setShowModal] = useState(false)
-  const [modalTab, setModalTab] = useState('create') // 'create' | 'upload' | 'demo'
-  const [showSettings, setShowSettings] = useState(false)
-  const [newSubjectName, setNewSubjectName] = useState('')
-  const [newSubjectEmoji, setNewSubjectEmoji] = useState('📚')
-  const stats = getStats()
+  const navigate = useNavigate();
+  const { subjects, addSubject, removeSubject, setCurrentSubject, getStats } = useStore();
+  const { user, logout } = useAuthStore();
+  const [showModal, setShowModal] = useState(false);
+  const [modalTab, setModalTab] = useState('create'); // 'create' | 'upload' | 'demo'
+  const [showSettings, setShowSettings] = useState(false);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const [newSubjectName, setNewSubjectName] = useState('');
+  const [newSubjectEmoji, setNewSubjectEmoji] = useState('📚');
+  const stats = getStats();
+
+  const handleLogout = async () => {
+    await logout();
+    navigate('/login');
+  };
 
   const gradients = [
     'from-blue-500 to-blue-600',
@@ -89,6 +98,39 @@ export default function Dashboard() {
           </Link>
 
           <div className="flex items-center gap-3">
+            {user?.role === 'student' && (
+              <button
+                onClick={() => setShowUpgradeModal(true)}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-purple-600/20 to-purple-500/20 hover:from-purple-600/30 hover:to-purple-500/30 border border-purple-500/30 text-purple-300 hover:text-purple-200 transition-all"
+              >
+                <Crown className="w-4 h-4" />
+                <span className="text-sm font-medium">Become a Teacher</span>
+              </button>
+            )}
+            {user?.role === 'teacher' && (
+              <Link
+                to="/teacher"
+                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-purple-600/20 to-purple-500/20 hover:from-purple-600/30 hover:to-purple-500/30 border border-purple-500/30 text-purple-300 hover:text-purple-200 transition-all"
+              >
+                <GraduationCap className="w-4 h-4" />
+                <span className="text-sm font-medium">Teacher Portal</span>
+              </Link>
+            )}
+            <button
+              onClick={() => setShowSettings(true)}
+              className="p-2 rounded-xl hover:bg-white/10 transition-colors text-gray-400 hover:text-white"
+              title="Settings"
+            >
+              <SettingsIcon className="w-5 h-5" />
+            </button>
+            <button
+              onClick={handleLogout}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-colors"
+            >
+              <LogOut className="w-4 h-4" />
+              <span className="text-sm font-medium">Logout</span>
+            </button>
+          </div>
             <button 
               onClick={() => setShowSettings(true)} 
               className="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
@@ -349,6 +391,9 @@ export default function Dashboard() {
 
       {/* Settings Modal */}
       {showSettings && <Settings onClose={() => setShowSettings(false)} />}
+      
+      {/* Teacher Upgrade Modal */}
+      <TeacherUpgradeModal isOpen={showUpgradeModal} onClose={() => setShowUpgradeModal(false)} />
     </div>
-  )
+  );
 }

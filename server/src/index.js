@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import rateLimit from 'express-rate-limit';
+import cookieParser from 'cookie-parser';
 
 // Load environment variables
 dotenv.config();
@@ -19,7 +20,11 @@ const limiter = rateLimit({
 });
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: process.env.CLIENT_URL || 'http://localhost:5173',
+  credentials: true, // Allow cookies
+}));
+app.use(cookieParser());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use('/api/', limiter);
@@ -29,13 +34,15 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', message: 'StudyForge server is running' });
 });
 
-// Routes will be added here
+// Routes
+import authRoutes from './routes/auth.js';
 import uploadRoutes from './routes/upload.js';
 import chatRoutes from './routes/chat.js';
 import generateRoutes from './routes/generate.js';
 import progressRoutes from './routes/progress.js';
 import teacherRoutes from './routes/teacher.js';
 
+app.use('/api/auth', authRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/generate', generateRoutes);

@@ -1,6 +1,6 @@
-import { Link } from 'react-router-dom'
-import { useState, useEffect } from 'react'
-import { motion } from 'framer-motion'
+import { Link } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { motion } from 'framer-motion';
 import { 
   Sparkles, 
   ArrowRight, 
@@ -12,18 +12,21 @@ import {
   Target,
   Trophy,
   CheckCircle2,
-  Play
-} from 'lucide-react'
-import { cn } from '../lib/utils'
+  Play,
+  LogIn
+} from 'lucide-react';
+import { cn } from '../lib/utils';
+import useAuthStore from '../store/useAuthStore';
 
 export default function Landing() {
-  const [scrolled, setScrolled] = useState(false)
+  const [scrolled, setScrolled] = useState(false);
+  const { isAuthenticated, user } = useAuthStore();
 
   useEffect(() => {
-    const handleScroll = () => setScrolled(window.scrollY > 20)
-    window.addEventListener('scroll', handleScroll)
-    return () => window.removeEventListener('scroll', handleScroll)
-  }, [])
+    const handleScroll = () => setScrolled(window.scrollY > 20);
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
 
   const features = [
     {
@@ -89,13 +92,28 @@ export default function Landing() {
             <Link to="/teacher" className="text-gray-400 hover:text-white transition-colors font-medium">Teacher Portal</Link>
           </div>
 
-          <div className="flex items-center gap-3">
-            <Link to="/teacher" className="px-4 py-2 rounded-xl bg-purple-600/20 hover:bg-purple-600/30 text-purple-400 hover:text-purple-300 transition-colors font-medium border border-purple-600/30">
-              Teachers
-            </Link>
-            <Link to="/dashboard" className="btn btn-primary shimmer-button">
-              Get Started
-              <ArrowRight className="w-4 h-4" />
+          <d{isAuthenticated ? (
+              <>
+                <Link to="/dashboard" className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-colors font-medium">
+                  Dashboard
+                </Link>
+                <Link to={user?.role === 'teacher' ? '/teacher' : '/dashboard'} className="btn btn-primary shimmer-button">
+                  {user?.role === 'teacher' ? 'Teacher Portal' : 'Get Started'}
+                  <ArrowRight className="w-4 h-4" />
+                </Link>
+              </>
+            ) : (
+              <>
+                <Link to="/login" className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-colors font-medium flex items-center gap-2">
+                  <LogIn className="w-4 h-4" />
+                  Log In
+                </Link>
+                <Link to="/signup" className="btn btn-primary shimmer-button">
+                  Sign Up Free
+                  <ArrowRight className="w-4 h-4" />
+                </Link>
+              </>
+            )}wRight className="w-4 h-4" />
             </Link>
           </div>
         </div>
