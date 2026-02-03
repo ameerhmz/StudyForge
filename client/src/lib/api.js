@@ -1,172 +1,145 @@
-import axios from 'axios';
+import axios from 'axios'
 
-// Base API URL - change in production
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+const API_BASE = 'http://localhost:3000/api'
 
-// Create axios instance with default config
 const api = axios.create({
-  baseURL: BASE_URL,
-  timeout: 60000, // 60 seconds (AI generation can take time)
-  headers: {
-    'Content-Type': 'application/json',
-  },
-});
-
-// Request interceptor - add auth token if needed
-api.interceptors.request.use(
-  (config) => {
-    // You can add auth token here if needed
-    // const token = localStorage.getItem('token');
-    // if (token) {
-    //   config.headers.Authorization = `Bearer ${token}`;
-    // }
-    return config;
-  },
-  (error) => {
-    return Promise.reject(error);
-  }
-);
-
-// Response interceptor - handle errors globally
-api.interceptors.response.use(
-  (response) => response.data, // Return only data
-  (error) => {
-    const message = error.response?.data?.error?.message || error.message || 'An error occurred';
-    
-    // You can show toast notification here
-    console.error('API Error:', message);
-    
-    return Promise.reject({
-      message,
-      status: error.response?.status,
-      details: error.response?.data?.error?.details,
-    });
-  }
-);
-
-// ==================== Health Check ====================
-export const checkHealth = () => api.get('/health');
-
-// ==================== Generation APIs ====================
+  baseURL: API_BASE,
+  timeout: 120000,
+  headers: { 'Content-Type': 'application/json' }
+})
 
 /**
- * Generate a syllabus from document content
- * @param {string} content - Document text content
- * @returns {Promise} Syllabus object
+ * Generate syllabus with optional streaming support
  */
-export const generateSyllabus = (content) => {
-  return api.post('/api/generate/syllabus', { content });
-};
+export async function generateSyllabus(content, options = {}) {
+  const { stream = false, onChunk } = options
+
+  if (stream && onChunk) {
+    // Streaming mode
+    const response = await fetch(`${API_BASE}/generate/syllabus`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content, stream: true })
+    })
+    
+    if (!response.ok) throw new Error('Failed to generate syllabus')
+    
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder()
+    let result = null
+    
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      
+      const chunk = decoder.decode(value)
+      const lines = chunk.split('\n')
+      
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          try {
+            const data = JSON.parse(line.slice(6))
+            if (data.type === 'chunk') {
+              onChunk(data.content)
+            } else if (data.type === 'done') {
+              result = data.data
+            } else if (data.type === 'error') {
+              throw new Error(data.message)
+            }
+          } catch (e) {
+            if (e.message !== 'Unexpected end of JSON input') throw e
+          }
+        }
+      }
+    }
+    return result
+  } else {
+    // Non-streaming mode
+    const { data } = await api.post('/generate/syllabus', { content })
+    return data.data
+  }
+}
 
 /**
- * Generate quiz questions from document content
- * @param {string} content - Document text content
- * @param {Object} options - Quiz options
- * @param {string} options.topic - Optional specific topic
- * @param {string} options.difficulty - 'easy', 'medium', or 'hard'
- * @param {number} options.questionCount - Number of questions
- * @returns {Promise} Quiz object with questions
+ * Generate quiz questions
  */
-export const generateQuiz = (content, options = {}) => {
-  const { topic, difficulty = 'medium', questionCount = 5 } = options;
-  return api.post('/api/generate/quiz', {
+export async function generateQuiz(content, options = {}) {
+  const { data } = await api.post('/generate/quiz', {
     content,
-    topic,
-    difficulty,
-    questionCount,
-  });
-};
+    difficulty: options.difficulty || 'medium',
+    questionCount: options.questionCount || 5,
+    topic: options.topic || null
+  })
+  return data.data
+}
 
 /**
- * Generate flashcards from document content
- * @param {string} content - Document text content
- * @param {number} cardCount - Number of flashcards to generate
- * @returns {Promise} Flashcard deck object
+ * Generate flashcards
  */
-export const generateFlashcards = (content, cardCount = 10) => {
-  return api.post('/api/generate/flashcards', { content, cardCount });
-};
-
-// ==================== Progress Tracking ====================
+export async function generateFlashcards(content, options = {}) {
+  const { data } = await api.post('/generate/flashcards', {
+    content,
+    cardCount: options.cardCount || 10
+  })
+  return data.data
+}
 
 /**
  * Save study progress
- * @param {Object} progress - Progress data
- * @param {string} progress.documentId - UUID of the document
- * @param {string} progress.type - 'quiz' or 'flashcard'
- * @param {number} progress.score - Score achieved
- * @param {number} progress.total - Total possible score
- * @param {Object} progress.metadata - Optional metadata
- * @returns {Promise} Saved progress entry
  */
-export const saveProgress = (progress) => {
-  return api.post('/api/progress/save', progress);
-};
+export async function saveProgress(documentId, type, score, total, metadata = {}) {
+  const { data } = await api.post('/progress/save', {
+    documentId,
+    type, // 'quiz' or 'flashcard'
+    score,
+    total,
+    metadata
+  })
+  return data.data
+}
 
 /**
- * Get progress for a specific document
- * @param {string} documentId - UUID of the document
- * @returns {Promise} Progress statistics
+ * Get progress for a document
  */
-export const getDocumentProgress = (documentId) => {
-  return api.get(`/api/progress/${documentId}`);
-};
+export async function getProgress(documentId) {
+  const { data } = await api.get(`/progress/${documentId}`)
+  return data.data
+}
 
 /**
- * Get overall progress statistics
- * @returns {Promise} Overall statistics
+ * Get overall stats
  */
-export const getOverallProgress = () => {
-  return api.get('/api/progress/stats/overall');
-};
+export async function getOverallStats() {
+  const { data } = await api.get('/progress/stats/overall')
+  return data.data
+}
 
 /**
  * Clear progress for a document
- * @param {string} documentId - UUID of the document
- * @returns {Promise} Success message
  */
-export const clearDocumentProgress = (documentId) => {
-  return api.delete(`/api/progress/${documentId}`);
-};
-
-// ==================== Document Upload (Coming Soon) ====================
+export async function clearProgress(documentId) {
+  const { data } = await api.delete(`/progress/${documentId}`)
+  return data
+}
 
 /**
- * Upload a PDF document
- * @param {File} file - PDF file to upload
- * @param {Function} onProgress - Progress callback
- * @returns {Promise} Upload result with documentId
+ * Chat with document
  */
-export const uploadDocument = (file, onProgress) => {
-  const formData = new FormData();
-  formData.append('file', file);
-
-  return api.post('/api/upload', formData, {
-    headers: {
-      'Content-Type': 'multipart/form-data',
-    },
-    onUploadProgress: (progressEvent) => {
-      if (onProgress) {
-        const percentCompleted = Math.round(
-          (progressEvent.loaded * 100) / progressEvent.total
-        );
-        onProgress(percentCompleted);
-      }
-    },
-  });
-};
-
-// ==================== Chat (Coming Soon) ====================
+export async function chatWithDocument(content, question, history = []) {
+  const { data } = await api.post('/chat', {
+    content,
+    question,
+    history
+  })
+  return data.data
+}
 
 /**
- * Chat with a document using RAG
- * @param {string} documentId - UUID of the document
- * @param {string} question - User's question
- * @returns {Promise} AI response
+ * Health check
  */
-export const chatWithDocument = (documentId, question) => {
-  return api.post('/api/chat', { documentId, question });
-};
+export async function checkHealth() {
+  const { data } = await api.get('/health')
+  return data
+}
 
-// Export the axios instance for custom requests
-export default api;
+export default api

@@ -1,10 +1,12 @@
 import express from 'express';
 import { z } from 'zod';
+import { analyzeWeakTopics } from '../services/generator.js';
 
 const router = express.Router();
 
-// In-memory storage for now (Harsh will replace with database)
+// In-memory storage for now (can be replaced with database)
 const progressStore = new Map();
+const quizResultsStore = new Map(); // Store quiz results by subject/topic
 
 // Schema for saving progress
 const ProgressSchema = z.object({
@@ -16,7 +18,20 @@ const ProgressSchema = z.object({
     timeSpent: z.number().optional(), // seconds
     difficulty: z.string().optional(),
     wrongAnswers: z.array(z.number()).optional(),
+    topic: z.string().optional(),
+    subjectId: z.string().optional(),
   }).optional(),
+});
+
+// Schema for quiz results (for weak topic analysis)
+const QuizResultSchema = z.object({
+  subjectId: z.string(),
+  topic: z.string(),
+  score: z.number().min(0).max(100),
+  questionsTotal: z.number().int().min(1),
+  questionsCorrect: z.number().int().min(0),
+  timeSpent: z.number().optional(),
+  wrongQuestions: z.array(z.string()).optional(),
 });
 
 /**
@@ -51,6 +66,147 @@ router.post('/save', async (req, res, next) => {
         error: { message: 'Invalid progress data', details: error.errors },
       });
     }
+    next(error);
+  }
+});
+
+/**
+ * POST /api/progress/quiz-result - Save quiz result for weak topic analysis
+ */
+router.post('/quiz-result', async (req, res, next) => {
+  try {
+    const data = QuizResultSchema.parse(req.body);
+    
+    const key = `${data.subjectId}_${data.topic}`;
+    if (!quizResultsStore.has(key)) {
+      quizResultsStore.set(key, []);
+    }
+    
+    const result = {
+      ...data,
+      timestamp: new Date().toISOString(),
+    };
+    
+    quizResultsStore.get(key).push(result);
+    
+    console.log(`📊 Quiz result saved: ${data.topic} - ${data.score}%`);
+    
+    res.json({
+      success: true,
+      data: result,
+    });
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({
+        error: { message: 'Invalid quiz result data', details: error.errors },
+      });
+    }
+    next(error);
+  }
+});
+
+/**
+ * POST /api/progress/weak-topics - Analyze weak topics from quiz scores
+ */
+router.post('/weak-topics', async (req, res, next) => {
+  try {
+    const { subjectId, topics } = req.body;
+    
+    if (!topics || !Array.isArray(topics)) {
+      return res.status(400).json({
+        error: { message: 'Topics array is required' }
+      });
+    }
+    
+    // Gather quiz results for each topic
+    const quizScores = [];
+    for (const topic of topics) {
+      const key = subjectId ? `${subjectId}_${topic}` : null;
+      const results = key ? quizResultsStore.get(key) || [] : [];
+      
+      if (results.length > 0) {
+        const avgScore = results.reduce((sum, r) => sum + r.score, 0) / results.length;
+        const totalAttempts = results.length;
+        
+        quizScores.push({
+          topic,
+          averageScore: Math.round(avgScore),
+          attempts: totalAttempts,
+          lastAttempt: results[results.length - 1].timestamp,
+          trend: calculateTrend(results),
+        });
+      } else {
+        quizScores.push({
+          topic,
+          averageScore: null,
+          attempts: 0,
+          lastAttempt: null,
+          trend: 'unknown',
+        });
+      }
+    }
+    
+    // Use AI to analyze weak topics
+    const analysis = await analyzeWeakTopics(quizScores);
+    
+    res.json({
+      success: true,
+      data: {
+        quizScores,
+        analysis,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * GET /api/progress/subject/:subjectId - Get progress for a subject
+ */
+router.get('/subject/:subjectId', async (req, res, next) => {
+  try {
+    const { subjectId } = req.params;
+    
+    // Gather all quiz results for this subject
+    const results = [];
+    for (const [key, value] of quizResultsStore.entries()) {
+      if (key.startsWith(subjectId)) {
+        results.push(...value);
+      }
+    }
+    
+    // Calculate topic-wise performance
+    const topicPerformance = {};
+    for (const result of results) {
+      if (!topicPerformance[result.topic]) {
+        topicPerformance[result.topic] = {
+          scores: [],
+          totalTime: 0,
+        };
+      }
+      topicPerformance[result.topic].scores.push(result.score);
+      topicPerformance[result.topic].totalTime += result.timeSpent || 0;
+    }
+    
+    const summary = Object.entries(topicPerformance).map(([topic, data]) => ({
+      topic,
+      averageScore: Math.round(data.scores.reduce((a, b) => a + b, 0) / data.scores.length),
+      attempts: data.scores.length,
+      totalTimeMinutes: Math.round(data.totalTime / 60),
+      mastery: getMasteryLevel(data.scores),
+    }));
+    
+    res.json({
+      success: true,
+      data: {
+        subjectId,
+        totalQuizzes: results.length,
+        topicPerformance: summary,
+        recentResults: results.slice(-5).reverse(),
+      },
+    });
+  } catch (error) {
     next(error);
   }
 });
@@ -146,5 +302,29 @@ router.delete('/:documentId', async (req, res, next) => {
     next(error);
   }
 });
+
+// Helper function to calculate trend
+function calculateTrend(results) {
+  if (results.length < 2) return 'stable';
+  
+  const recent = results.slice(-3);
+  const scores = recent.map(r => r.score);
+  
+  const avgRecent = scores.reduce((a, b) => a + b, 0) / scores.length;
+  const avgOlder = results.slice(0, -3).reduce((sum, r) => sum + r.score, 0) / Math.max(results.length - 3, 1);
+  
+  if (avgRecent > avgOlder + 10) return 'improving';
+  if (avgRecent < avgOlder - 10) return 'declining';
+  return 'stable';
+}
+
+// Helper function to get mastery level
+function getMasteryLevel(scores) {
+  const avg = scores.reduce((a, b) => a + b, 0) / scores.length;
+  if (avg >= 90) return 'mastered';
+  if (avg >= 70) return 'proficient';
+  if (avg >= 50) return 'learning';
+  return 'needs-practice';
+}
 
 export default router;

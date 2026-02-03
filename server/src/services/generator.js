@@ -10,8 +10,25 @@ let ollamaLLM;
 let geminiModel;
 let initialized = false;
 
+// Settings store (in-memory for now)
+let settings = {
+  localOnlyMode: false,
+  aiProvider: null // null means use env default
+};
+
+export function getSettings() {
+  return { ...settings };
+}
+
+export function updateSettings(newSettings) {
+  settings = { ...settings, ...newSettings };
+  initialized = false; // Force re-initialization
+  return settings;
+}
+
 function getAIProvider() {
-  return process.env.AI_PROVIDER || 'ollama';
+  if (settings.localOnlyMode) return 'ollama';
+  return settings.aiProvider || process.env.AI_PROVIDER || 'ollama';
 }
 
 function initializeProviders() {
@@ -64,6 +81,41 @@ async function generateText(prompt) {
 }
 
 /**
+ * Generate text with streaming support
+ * @param {string} prompt - The prompt to send to the AI
+ * @param {function} onChunk - Callback for each text chunk (chunk: string) => void
+ * @returns {Promise<string>} - Complete AI response
+ */
+async function generateTextStream(prompt, onChunk) {
+  initializeProviders();
+  const AI_PROVIDER = getAIProvider();
+  
+  if (AI_PROVIDER === 'gemini') {
+    const result = await geminiModel.generateContentStream(prompt);
+    let fullText = '';
+    
+    for await (const chunk of result.stream) {
+      const chunkText = chunk.text();
+      fullText += chunkText;
+      if (onChunk) onChunk(chunkText);
+    }
+    
+    return fullText;
+  } else {
+    // Ollama streaming
+    const stream = await ollamaLLM.stream(prompt);
+    let fullText = '';
+    
+    for await (const chunk of stream) {
+      fullText += chunk;
+      if (onChunk) onChunk(chunk);
+    }
+    
+    return fullText;
+  }
+}
+
+/**
  * Extract JSON from AI response
  */
 function extractJSON(response) {
@@ -93,6 +145,43 @@ function extractJSON(response) {
 /**
  * Generate a syllabus from document content
  */
+/**
+ * Generate syllabus with streaming support
+ */
+export async function generateSyllabusStream(content, onChunk) {
+  try {
+    console.log('📚 Generating syllabus with streaming...');
+
+    const prompt = `Analyze the following educational content and create a structured syllabus.
+
+Content:
+${content}
+
+Generate a JSON syllabus with this structure:
+{
+  "title": "Course title",
+  "chapters": [
+    {
+      "title": "Chapter name",
+      "topics": ["topic1", "topic2"]
+    }
+  ]
+}
+
+Return ONLY valid JSON, no explanations.`;
+
+    const response = await generateTextStream(prompt, onChunk);
+    const jsonStr = extractJSON(response);
+    const data = JSON.parse(jsonStr);
+    const validated = validateSyllabus(data);
+
+    return validated;
+  } catch (error) {
+    console.error('Error generating syllabus:', error.message);
+    throw new Error(`Failed to generate syllabus: ${error.message}`);
+  }
+}
+
 export async function generateSyllabus(content) {
   try {
     console.log('📚 Generating syllabus...');
@@ -237,5 +326,359 @@ IMPORTANT:
   } catch (error) {
     console.error('Error generating flashcards:', error.message);
     throw new Error(`Failed to generate flashcards: ${error.message}`);
+  }
+}
+
+/**
+ * Generate comprehensive syllabus from PDF content with topic metadata
+ */
+export async function generateSyllabusFromPDF(content) {
+  try {
+    console.log('📚 Generating comprehensive syllabus from PDF...');
+
+    const prompt = `Analyze this educational content and create a detailed structured syllabus with topic metadata.
+
+Content:
+${content.substring(0, 15000)}
+
+Generate a JSON object with this EXACT structure:
+{
+  "title": "Subject/Course Title",
+  "description": "Brief overview of the content",
+  "totalStudyTime": "Estimated total hours to study",
+  "topics": [
+    {
+      "id": "topic-1",
+      "title": "Topic Name",
+      "description": "Brief description of what this topic covers",
+      "content": "Key content summary for this topic (2-3 paragraphs)",
+      "difficulty": "beginner|intermediate|advanced",
+      "studyTime": "30 mins",
+      "importance": "high|medium|low",
+      "examWeight": 15,
+      "keyPoints": ["point 1", "point 2", "point 3"],
+      "prerequisites": []
+    }
+  ]
+}
+
+RULES:
+- Return ONLY valid JSON, no extra text
+- Extract 5-10 main topics from the content
+- Each topic must have all fields
+- difficulty: beginner, intermediate, or advanced
+- importance: high, medium, or low
+- examWeight: percentage (all should sum to ~100)
+- studyTime: realistic estimate like "30 mins", "1 hour", "2 hours"
+- keyPoints: 3-5 bullet points per topic
+- prerequisites: list topic IDs that should be studied first`;
+
+    const response = await generateText(prompt);
+    const jsonStr = extractJSON(response);
+    
+    let parsed;
+    try {
+      parsed = JSON.parse(jsonStr);
+    } catch (parseError) {
+      console.error('JSON parsing failed for syllabus');
+      throw new Error(`Invalid JSON from AI: ${parseError.message}`);
+    }
+    
+    // Ensure topics have IDs
+    if (parsed.topics) {
+      parsed.topics = parsed.topics.map((topic, index) => ({
+        ...topic,
+        id: topic.id || `topic-${index + 1}`
+      }));
+    }
+
+    console.log(`✅ Generated syllabus with ${parsed.topics?.length || 0} topics`);
+    return parsed;
+  } catch (error) {
+    console.error('Error generating PDF syllabus:', error.message);
+    throw new Error(`Failed to generate syllabus: ${error.message}`);
+  }
+}
+
+/**
+ * Generate exam mode compressed revision for a topic
+ */
+export async function generateExamRevision(content, topic = null) {
+  try {
+    console.log('🎯 Generating exam revision summary...');
+
+    const topicText = topic ? `Focus specifically on: "${topic}"` : '';
+
+    const prompt = `Create a compressed exam revision summary for quick last-minute review.
+
+Content:
+${content.substring(0, 10000)}
+
+${topicText}
+
+Generate a JSON object with this structure:
+{
+  "title": "Revision: Topic Name",
+  "quickSummary": "2-3 sentence overview of the most important points",
+  "mustRemember": [
+    "Critical point 1 that WILL be on the exam",
+    "Critical point 2",
+    "Critical point 3"
+  ],
+  "formulas": [
+    {"name": "Formula name", "formula": "The actual formula", "when": "When to use it"}
+  ],
+  "definitions": [
+    {"term": "Key term", "definition": "Concise definition"}
+  ],
+  "commonMistakes": [
+    "Mistake students often make"
+  ],
+  "mnemonics": [
+    {"topic": "What it helps remember", "mnemonic": "The memory aid"}
+  ],
+  "quickQuiz": [
+    {"q": "Quick question?", "a": "Short answer"}
+  ]
+}
+
+RULES:
+- Be extremely concise - this is for last-minute revision
+- Focus on exam-likely content
+- Include 3-5 items per section
+- Return ONLY valid JSON`;
+
+    const response = await generateText(prompt);
+    const jsonStr = extractJSON(response);
+    const parsed = JSON.parse(jsonStr);
+
+    console.log('✅ Generated exam revision summary');
+    return parsed;
+  } catch (error) {
+    console.error('Error generating exam revision:', error.message);
+    throw new Error(`Failed to generate exam revision: ${error.message}`);
+  }
+}
+
+/**
+ * Generate rapid revision quiz (harder, faster)
+ */
+export async function generateRapidQuiz(content, topic = null) {
+  try {
+    console.log('⚡ Generating rapid revision quiz...');
+
+    const topicText = topic ? `Focus on: "${topic}"` : '';
+
+    const prompt = `Create a rapid-fire exam revision quiz with challenging questions.
+
+Content:
+${content.substring(0, 8000)}
+
+${topicText}
+
+Generate a JSON object:
+{
+  "title": "Rapid Quiz: Topic",
+  "timeLimit": 5,
+  "questions": [
+    {
+      "question": "Quick but challenging question?",
+      "options": ["A", "B", "C", "D"],
+      "correctIndex": 0,
+      "explanation": "Brief explanation",
+      "difficulty": "hard"
+    }
+  ]
+}
+
+RULES:
+- 10 questions, mix of difficulties (mostly medium-hard)
+- Questions should test deep understanding, not just recall
+- Include some tricky questions with similar-looking options
+- Return ONLY valid JSON`;
+
+    const response = await generateText(prompt);
+    const jsonStr = extractJSON(response);
+    const parsed = JSON.parse(jsonStr);
+
+    return parsed;
+  } catch (error) {
+    console.error('Error generating rapid quiz:', error.message);
+    throw new Error(`Failed to generate rapid quiz: ${error.message}`);
+  }
+}
+
+/**
+ * Generate YouTube search queries for a topic
+ */
+export async function generateYouTubeQueries(topic, subjectContext = '') {
+  try {
+    console.log(`🎬 Generating YouTube queries for: ${topic}`);
+
+    const prompt = `Generate YouTube search queries to find educational videos about this topic.
+
+Topic: ${topic}
+Subject Context: ${subjectContext}
+
+Generate a JSON object:
+{
+  "queries": [
+    {
+      "query": "search query for youtube",
+      "type": "explanation|tutorial|example|crash-course",
+      "description": "What this video would cover"
+    }
+  ]
+}
+
+Generate 4-5 diverse queries:
+- One for basic explanation
+- One for worked examples
+- One for crash course/summary
+- One for advanced concepts
+Return ONLY valid JSON`;
+
+    const response = await generateText(prompt);
+    const jsonStr = extractJSON(response);
+    const parsed = JSON.parse(jsonStr);
+
+    return parsed.queries || [];
+  } catch (error) {
+    console.error('Error generating YouTube queries:', error.message);
+    return [{ query: `${topic} explained`, type: 'explanation', description: 'General explanation' }];
+  }
+}
+
+/**
+ * Analyze quiz scores to identify weak topics
+ */
+export function analyzeWeakTopics(quizHistory, topics) {
+  const topicScores = {};
+  
+  // Aggregate scores by topic
+  for (const quiz of quizHistory) {
+    const topic = quiz.topic || 'general';
+    if (!topicScores[topic]) {
+      topicScores[topic] = { correct: 0, total: 0, attempts: 0 };
+    }
+    topicScores[topic].correct += quiz.score || 0;
+    topicScores[topic].total += quiz.total || 0;
+    topicScores[topic].attempts += 1;
+  }
+  
+  // Calculate percentages and identify weak areas
+  const analysis = [];
+  for (const [topic, data] of Object.entries(topicScores)) {
+    const percentage = data.total > 0 ? Math.round((data.correct / data.total) * 100) : 0;
+    const topicInfo = topics?.find(t => t.title === topic || t.id === topic);
+    
+    analysis.push({
+      topic,
+      topicId: topicInfo?.id,
+      percentage,
+      attempts: data.attempts,
+      correct: data.correct,
+      total: data.total,
+      status: percentage >= 80 ? 'strong' : percentage >= 60 ? 'moderate' : 'weak',
+      recommendation: percentage < 60 
+        ? 'Needs more practice - review fundamentals'
+        : percentage < 80 
+        ? 'Good progress - focus on edge cases'
+        : 'Well understood - maintain with occasional review',
+      priority: percentage < 60 ? 'high' : percentage < 80 ? 'medium' : 'low'
+    });
+  }
+  
+  // Sort by percentage (weakest first)
+  analysis.sort((a, b) => a.percentage - b.percentage);
+  
+  return {
+    weakTopics: analysis.filter(a => a.status === 'weak'),
+    moderateTopics: analysis.filter(a => a.status === 'moderate'),
+    strongTopics: analysis.filter(a => a.status === 'strong'),
+    allTopics: analysis,
+    overallScore: analysis.length > 0 
+      ? Math.round(analysis.reduce((sum, a) => sum + a.percentage, 0) / analysis.length)
+      : 0,
+    recommendations: analysis.filter(a => a.status === 'weak').map(a => ({
+      topic: a.topic,
+      action: `Review "${a.topic}" - currently at ${a.percentage}%`
+    }))
+  };
+}
+
+/**
+ * Generate study plan based on exam date and available time
+ */
+export async function generateStudyPlan(topics, examDate, dailyHours, weakTopics = []) {
+  try {
+    console.log('📅 Generating personalized study plan...');
+
+    const daysUntilExam = Math.ceil((new Date(examDate) - new Date()) / (1000 * 60 * 60 * 24));
+    const totalHours = daysUntilExam * dailyHours;
+
+    const prompt = `Create a study plan for an upcoming exam.
+
+Topics to cover:
+${JSON.stringify(topics.map(t => ({ 
+  title: t.title, 
+  difficulty: t.difficulty, 
+  importance: t.importance,
+  studyTime: t.studyTime,
+  examWeight: t.examWeight
+})), null, 2)}
+
+Weak topics that need extra attention:
+${weakTopics.map(w => w.topic).join(', ') || 'None identified yet'}
+
+Exam Date: ${examDate}
+Days until exam: ${daysUntilExam}
+Daily study hours available: ${dailyHours}
+Total hours available: ${totalHours}
+
+Generate a JSON study plan:
+{
+  "overview": {
+    "totalDays": ${daysUntilExam},
+    "totalHours": ${totalHours},
+    "strategy": "Brief strategy description"
+  },
+  "phases": [
+    {
+      "name": "Phase name",
+      "days": "Day 1-3",
+      "focus": "What to focus on",
+      "topics": ["topic1", "topic2"],
+      "goals": ["goal1", "goal2"]
+    }
+  ],
+  "dailySchedule": [
+    {
+      "day": 1,
+      "date": "YYYY-MM-DD",
+      "topics": [
+        {"topic": "Topic name", "duration": "1 hour", "activity": "Read + Notes"}
+      ],
+      "totalHours": ${dailyHours}
+    }
+  ],
+  "tips": ["Study tip 1", "Study tip 2"]
+}
+
+RULES:
+- Prioritize weak topics and high-importance topics
+- Leave last 1-2 days for revision only
+- Include breaks and varied activities
+- Return ONLY valid JSON`;
+
+    const response = await generateText(prompt);
+    const jsonStr = extractJSON(response);
+    const parsed = JSON.parse(jsonStr);
+
+    console.log('✅ Generated study plan');
+    return parsed;
+  } catch (error) {
+    console.error('Error generating study plan:', error.message);
+    throw new Error(`Failed to generate study plan: ${error.message}`);
   }
 }
