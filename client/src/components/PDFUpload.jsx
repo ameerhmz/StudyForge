@@ -3,7 +3,7 @@ import { useDropzone } from 'react-dropzone';
 import { Upload, FileText, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
 import useStore from '../store/useStore';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 function PDFUpload({ onUploadComplete }) {
   const [uploading, setUploading] = useState(false);
@@ -25,7 +25,7 @@ function PDFUpload({ onUploadComplete }) {
       setProgress(30);
       setMessage('Uploading file...');
 
-      const response = await fetch(`${API_URL}/upload`, {
+      const response = await fetch(`${API_URL}/api/upload`, {
         method: 'POST',
         body: formData,
       });
@@ -46,15 +46,15 @@ function PDFUpload({ onUploadComplete }) {
       const subjectName = file.name.replace('.pdf', '').replace(/[_-]/g, ' ');
       const newSubject = {
         id: crypto.randomUUID(),
-        name: subjectName,
+        name: result.data.name || subjectName,
         description: `Generated from: ${file.name}`,
-        topics: result.data.syllabus?.topics || [],
-        content: result.data.text.substring(0, 50000), // Store first 50k chars
-        documentId: result.data.documentId,
+        topics: result.data.syllabus?.topics || result.data.topics || [],
+        content: result.data.content?.substring(0, 50000) || '', // Store first 50k chars
+        documentId: result.data.id,
         createdAt: new Date().toISOString(),
         metadata: {
           pageCount: result.data.pageCount,
-          wordCount: result.data.wordCount,
+          wordCount: result.data.textLength,
           source: 'pdf',
         },
       };

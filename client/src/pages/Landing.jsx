@@ -92,7 +92,8 @@ export default function Landing() {
             <Link to="/teacher" className="text-gray-400 hover:text-white transition-colors font-medium">Teacher Portal</Link>
           </div>
 
-          <d{isAuthenticated ? (
+          <div className="flex items-center gap-3">
+            {isAuthenticated ? (
               <>
                 <Link to="/dashboard" className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-colors font-medium">
                   Dashboard
@@ -113,8 +114,7 @@ export default function Landing() {
                   <ArrowRight className="w-4 h-4" />
                 </Link>
               </>
-            )}wRight className="w-4 h-4" />
-            </Link>
+            )}
           </div>
         </div>
       </motion.nav>

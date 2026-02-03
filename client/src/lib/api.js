@@ -135,6 +135,17 @@ export async function chatWithDocument(content, question, history = []) {
 }
 
 /**
+ * Generate YouTube search queries for a topic
+ */
+export async function generateYouTubeQueries(topics, subject = '') {
+  const { data } = await api.post('/generate/youtube-queries', {
+    topics: Array.isArray(topics) ? topics : [topics],
+    subject
+  })
+  return data.data
+}
+
+/**
  * Health check
  */
 export async function checkHealth() {

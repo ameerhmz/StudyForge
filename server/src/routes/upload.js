@@ -1,8 +1,5 @@
 import express from 'express';
 import multer from 'multer';
-import { createRequire } from 'module';
-const require = createRequire(import.meta.url);
-const pdfParse = require('pdf-parse');
 import { generateSyllabusFromPDF } from '../services/generator.js';
 import { addDocumentToRAG, generateEmbedding } from '../services/rag.js';
 
@@ -73,9 +70,13 @@ router.post('/', upload.single('pdf'), async (req, res, next) => {
 
     console.log(`📄 Processing PDF: ${req.file.originalname} (${(req.file.size / 1024).toFixed(1)}KB)`);
 
-    // Extract text from PDF
-    const pdfData = await pdfParse(req.file.buffer);
-    const rawText = pdfData.text;
+    // Import pdf-parse - PDFParse is a class that takes options with data
+    const { PDFParse } = await import('pdf-parse');
+    const parser = new PDFParse({ data: req.file.buffer });
+    
+    // Extract text from PDF using getText() method
+    const textResult = await parser.getText();
+    const rawText = textResult.text;
     const cleanedText = cleanText(rawText);
 
     if (!cleanedText || cleanedText.length < 100) {
@@ -96,7 +97,7 @@ router.post('/', upload.single('pdf'), async (req, res, next) => {
     // Store chunks in RAG system
     await addDocumentToRAG(documentId, chunks, {
       filename: req.file.originalname,
-      pageCount: pdfData.numpages,
+      pageCount: textResult.total,
       title: syllabus.title
     });
 
@@ -106,7 +107,7 @@ router.post('/', upload.single('pdf'), async (req, res, next) => {
         id: documentId,
         name: syllabus.title || req.file.originalname.replace('.pdf', ''),
         filename: req.file.originalname,
-        pageCount: pdfData.numpages,
+        pageCount: textResult.total,
         textLength: cleanedText.length,
         chunkCount: chunks.length,
         content: cleanedText, // Full content for AI features

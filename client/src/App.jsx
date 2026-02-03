@@ -8,6 +8,7 @@ import StudyRoom from './pages/StudyRoom';
 import TopicStudy from './pages/TopicStudy';
 import TeacherDashboard from './pages/TeacherDashboard';
 import StudentDetailView from './pages/StudentDetailView';
+import Settings from './pages/Settings';
 import ProtectedRoute from './components/ProtectedRoute';
 import useAuthStore from './store/useAuthStore';
 
@@ -47,6 +48,16 @@ export default function App() {
           element={
             <ProtectedRoute>
               <TopicStudy />
+            </ProtectedRoute>
+          }
+        />
+        
+        {/* Settings Route */}
+        <Route
+          path="/settings"
+          element={
+            <ProtectedRoute>
+              <Settings />
             </ProtectedRoute>
           }
         />

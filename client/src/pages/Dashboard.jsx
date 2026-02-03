@@ -11,7 +11,6 @@ import useStore from '../store/useStore';
 import useAuthStore from '../store/useAuthStore';
 import { demoSubjects } from '../lib/demoData';
 import PDFUpload from '../components/PDFUpload';
-import Settings from '../components/Settings';
 import TeacherUpgradeModal from '../components/TeacherUpgradeModal';
 
 export default function Dashboard() {
@@ -20,7 +19,6 @@ export default function Dashboard() {
   const { user, logout } = useAuthStore();
   const [showModal, setShowModal] = useState(false);
   const [modalTab, setModalTab] = useState('create'); // 'create' | 'upload' | 'demo'
-  const [showSettings, setShowSettings] = useState(false);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [newSubjectName, setNewSubjectName] = useState('');
   const [newSubjectEmoji, setNewSubjectEmoji] = useState('📚');
@@ -116,26 +114,19 @@ export default function Dashboard() {
                 <span className="text-sm font-medium">Teacher Portal</span>
               </Link>
             )}
-            <button
-              onClick={() => setShowSettings(true)}
+            <Link
+              to="/settings"
               className="p-2 rounded-xl hover:bg-white/10 transition-colors text-gray-400 hover:text-white"
               title="Settings"
             >
               <SettingsIcon className="w-5 h-5" />
-            </button>
+            </Link>
             <button
               onClick={handleLogout}
               className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-colors"
             >
               <LogOut className="w-4 h-4" />
               <span className="text-sm font-medium">Logout</span>
-            </button>
-          </div>
-            <button 
-              onClick={() => setShowSettings(true)} 
-              className="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
-            >
-              <SettingsIcon className="w-5 h-5" />
             </button>
             <button onClick={() => setShowModal(true)} className="btn btn-primary shimmer-button">
               <Plus className="w-5 h-5" />
@@ -388,9 +379,6 @@ export default function Dashboard() {
           </motion.div>
         )}
       </AnimatePresence>
-
-      {/* Settings Modal */}
-      {showSettings && <Settings onClose={() => setShowSettings(false)} />}
       
       {/* Teacher Upgrade Modal */}
       <TeacherUpgradeModal isOpen={showUpgradeModal} onClose={() => setShowUpgradeModal(false)} />

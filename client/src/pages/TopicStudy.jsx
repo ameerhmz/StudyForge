@@ -3,12 +3,13 @@ import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { 
   Sparkles, ArrowLeft, CheckCircle, BookOpen, 
-  MessageCircle, RefreshCw, ChevronLeft, ChevronRight
+  MessageCircle, RefreshCw, ChevronLeft, ChevronRight,
+  Youtube, ExternalLink, Loader2
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import { cn } from '../lib/utils'
 import useStore from '../store/useStore'
-import { chatWithDocument } from '../lib/api'
+import { chatWithDocument, generateYouTubeQueries } from '../lib/api'
 
 export default function TopicStudy() {
   const { subjectId, topicId } = useParams()
@@ -23,6 +24,8 @@ export default function TopicStudy() {
   const [question, setQuestion] = useState('')
   const [answer, setAnswer] = useState(null)
   const [askingQuestion, setAskingQuestion] = useState(false)
+  const [youtubeQueries, setYoutubeQueries] = useState([])
+  const [loadingYoutube, setLoadingYoutube] = useState(false)
 
   // Find subject and topic
   const subject = subjects.find(s => s.id === subjectId) || currentSubject
@@ -93,6 +96,25 @@ Format the response with clear sections and bullet points.`
     } finally {
       setAskingQuestion(false)
     }
+  }
+
+  const fetchYouTubeQueries = async () => {
+    if (!topic) return
+    
+    setLoadingYoutube(true)
+    try {
+      const queries = await generateYouTubeQueries(topic.title, subject.name)
+      setYoutubeQueries(queries || [])
+    } catch (err) {
+      console.error('Failed to get YouTube queries:', err)
+    } finally {
+      setLoadingYoutube(false)
+    }
+  }
+
+  const openYouTubeSearch = (query) => {
+    const url = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`
+    window.open(url, '_blank')
   }
 
   const navigateTopic = (direction) => {
@@ -315,6 +337,83 @@ Format the response with clear sections and bullet points.`
                   {answer}
                 </ReactMarkdown>
               </div>
+            </div>
+          )}
+        </motion.div>
+
+        {/* YouTube Video Suggestions */}
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.35 }}
+          className="card p-6 lg:p-8 mb-6"
+        >
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+              <Youtube className="w-5 h-5 text-red-500" />
+              YouTube Video Suggestions
+            </h2>
+            <button
+              onClick={fetchYouTubeQueries}
+              disabled={loadingYoutube}
+              className="btn btn-ghost text-sm"
+            >
+              {loadingYoutube ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <RefreshCw className="w-4 h-4" />
+              )}
+              {loadingYoutube ? 'Finding videos...' : youtubeQueries.length > 0 ? 'Refresh' : 'Find Videos'}
+            </button>
+          </div>
+
+          {youtubeQueries.length > 0 ? (
+            <div className="grid gap-3">
+              {youtubeQueries.map((item, index) => (
+                <button
+                  key={index}
+                  onClick={() => openYouTubeSearch(item.query)}
+                  className="flex items-start gap-4 p-4 rounded-xl bg-white/5 hover:bg-red-500/10 border border-white/10 hover:border-red-500/30 transition-all text-left group"
+                >
+                  <div className="w-10 h-10 rounded-lg bg-red-500/20 flex items-center justify-center flex-shrink-0">
+                    <Youtube className="w-5 h-5 text-red-400" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-white font-medium group-hover:text-red-300 transition-colors">
+                        {item.query}
+                      </span>
+                      <ExternalLink className="w-3.5 h-3.5 text-gray-500 group-hover:text-red-400 transition-colors" />
+                    </div>
+                    <p className="text-sm text-gray-400">{item.description}</p>
+                    <span className="inline-block mt-2 px-2 py-0.5 rounded text-xs bg-gray-700/50 text-gray-400 capitalize">
+                      {item.type}
+                    </span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-8">
+              <Youtube className="w-12 h-12 text-gray-600 mx-auto mb-3" />
+              <p className="text-gray-400 mb-2">Find YouTube videos to help you learn this topic</p>
+              <button
+                onClick={fetchYouTubeQueries}
+                disabled={loadingYoutube}
+                className="btn btn-primary"
+              >
+                {loadingYoutube ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Finding Videos...
+                  </>
+                ) : (
+                  <>
+                    <Youtube className="w-4 h-4" />
+                    Get Video Suggestions
+                  </>
+                )}
+              </button>
             </div>
           )}
         </motion.div>

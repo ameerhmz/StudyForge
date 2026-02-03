@@ -1,5 +1,6 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { Ollama } from '@langchain/ollama';
+import Groq from 'groq-sdk';
 import { validateQuiz, validateFlashcardDeck, validateSyllabus } from './schemas.js';
 import cache from './cache.js';
 import crypto from 'crypto';
@@ -10,6 +11,7 @@ dotenv.config();
 // Lazy initialization - read env at runtime
 let ollamaLLM;
 let geminiModel;
+let groqClient;
 let initialized = false;
 
 // Settings store (in-memory for now)
@@ -30,7 +32,7 @@ export function updateSettings(newSettings) {
 
 function getAIProvider() {
   if (settings.localOnlyMode) return 'ollama';
-  return settings.aiProvider || process.env.AI_PROVIDER || 'ollama';
+  return settings.aiProvider || process.env.AI_PROVIDER || 'groq';
 }
 
 function initializeProviders() {
@@ -39,6 +41,7 @@ function initializeProviders() {
   const AI_PROVIDER = getAIProvider();
   const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
   const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+  const GROQ_API_KEY = process.env.GROQ_API_KEY;
 
   if (AI_PROVIDER === 'ollama') {
     ollamaLLM = new Ollama({
@@ -52,14 +55,20 @@ function initializeProviders() {
       throw new Error('GEMINI_API_KEY not found in environment variables');
     }
     const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-    geminiModel = genAI.getGenerativeModel({
-      model: 'gemini-2.5-flash',
+    geminiModel = genAI.getGenerativeModel({ 
+      model: 'gemini-2.0-flash',
       generationConfig: {
         temperature: 0.7,
-        maxOutputTokens: 2048,
+        maxOutputTokens: 8192,
       },
     });
-    console.log('🤖 Using Gemini 2.5 Flash for generation');
+    console.log('🤖 Using Gemini 2.0 Flash for generation');
+  } else if (AI_PROVIDER === 'groq') {
+    if (!GROQ_API_KEY) {
+      throw new Error('GROQ_API_KEY not found in environment variables');
+    }
+    groqClient = new Groq({ apiKey: GROQ_API_KEY });
+    console.log('🤖 Using Groq (llama-3.3-70b-versatile) for generation');
   }
 
   initialized = true;
@@ -87,6 +96,14 @@ async function generateText(prompt) {
   if (AI_PROVIDER === 'gemini') {
     const result = await geminiModel.generateContent(prompt);
     response = result.response.text();
+  } else if (AI_PROVIDER === 'groq') {
+    const completion = await groqClient.chat.completions.create({
+      messages: [{ role: 'user', content: prompt }],
+      model: 'llama-3.3-70b-versatile',
+      temperature: 0.7,
+      max_completion_tokens: 8192,
+    });
+    response = completion.choices[0]?.message?.content || '';
   } else {
     response = await ollamaLLM.invoke(prompt);
   }
@@ -152,6 +169,30 @@ function extractJSON(response) {
   const jsonEnd = jsonStr.lastIndexOf('}');
   if (jsonStart !== -1 && jsonEnd !== -1) {
     jsonStr = jsonStr.slice(jsonStart, jsonEnd + 1);
+  }
+
+  // Try to repair truncated JSON by closing unclosed brackets
+  try {
+    JSON.parse(jsonStr);
+  } catch (e) {
+    // Count brackets to attempt repair
+    let openBraces = 0, openBrackets = 0;
+    let inString = false, escapeNext = false;
+    
+    for (const char of jsonStr) {
+      if (escapeNext) { escapeNext = false; continue; }
+      if (char === '\\') { escapeNext = true; continue; }
+      if (char === '"') { inString = !inString; continue; }
+      if (inString) continue;
+      if (char === '{') openBraces++;
+      if (char === '}') openBraces--;
+      if (char === '[') openBrackets++;
+      if (char === ']') openBrackets--;
+    }
+    
+    // Add missing closing brackets/braces
+    while (openBrackets > 0) { jsonStr += ']'; openBrackets--; }
+    while (openBraces > 0) { jsonStr += '}'; openBraces--; }
   }
 
   return jsonStr;
@@ -346,64 +387,69 @@ IMPORTANT:
 
 /**
  * Generate comprehensive syllabus from PDF content with topic metadata
+ * Enhanced for detailed course syllabus analysis
  */
 export async function generateSyllabusFromPDF(content) {
   try {
-    console.log('📚 Generating comprehensive syllabus from PDF...');
+    console.log('📚 Generating syllabus from PDF...');
 
-    const prompt = `Analyze this educational content and create a detailed structured syllabus with topic metadata.
+    const prompt = `Analyze this educational content and create a structured syllabus.
 
 Content:
 ${content.substring(0, 15000)}
 
-Generate a JSON object with this EXACT structure:
+Generate a JSON object with this structure:
 {
-  "title": "Subject/Course Title",
-  "description": "Brief overview of the content",
-  "totalStudyTime": "Estimated total hours to study",
+  "title": "Course Title",
+  "description": "Brief course overview (2-3 sentences)",
+  "objectives": ["Learning objective 1", "Learning objective 2"],
+  "totalStudyTime": "Estimated total hours",
   "topics": [
     {
       "id": "topic-1",
-      "title": "Topic Name",
-      "description": "Brief description of what this topic covers",
-      "content": "Key content summary for this topic (2-3 paragraphs)",
+      "weekNumber": 1,
+      "title": "Topic Title",
+      "description": "What this topic covers (2-3 sentences)",
+      "content": "Detailed content summary with key concepts (1-2 paragraphs)",
       "difficulty": "beginner|intermediate|advanced",
-      "studyTime": "30 mins",
-      "importance": "high|medium|low",
-      "examWeight": 15,
-      "keyPoints": ["point 1", "point 2", "point 3"],
-      "prerequisites": []
+      "studyTime": "Time estimate (e.g., 2 hours)",
+      "keyPoints": ["Key point 1", "Key point 2", "Key point 3"],
+      "examWeight": 10
     }
   ]
 }
 
 RULES:
-- Return ONLY valid JSON, no extra text
-- Extract 5-10 main topics from the content
-- Each topic must have all fields
-- difficulty: beginner, intermediate, or advanced
-- importance: high, medium, or low
-- examWeight: percentage (all should sum to ~100)
-- studyTime: realistic estimate like "30 mins", "1 hour", "2 hours"
-- keyPoints: 3-5 bullet points per topic
-- prerequisites: list topic IDs that should be studied first`;
+- Return ONLY valid JSON, no markdown, no extra text
+- Include 5-10 topics covering the main content
+- Each topic should have meaningful descriptions
+- examWeight percentages should sum to approximately 100
+- Keep responses concise but informative`;
 
     const response = await generateText(prompt);
+    console.log('📝 AI response length:', response.length);
+    
     const jsonStr = extractJSON(response);
 
     let parsed;
     try {
       parsed = JSON.parse(jsonStr);
     } catch (parseError) {
-      console.error('JSON parsing failed for syllabus');
+      console.error('JSON parsing failed. Raw response:', response.substring(0, 500));
       throw new Error(`Invalid JSON from AI: ${parseError.message}`);
     }
+<<<<<<< HEAD
 
     // Ensure topics have IDs
+=======
+    
+    // Ensure topics have IDs and week numbers
+>>>>>>> bc44d3e (feat: Add Groq AI integration, YouTube suggestions, Settings page, and bug fixes)
     if (parsed.topics) {
       parsed.topics = parsed.topics.map((topic, index) => ({
         ...topic,
-        id: topic.id || `topic-${index + 1}`
+        id: topic.id || `topic-${index + 1}`,
+        weekNumber: topic.weekNumber || index + 1
       }));
     }
 

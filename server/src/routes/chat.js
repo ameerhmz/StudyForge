@@ -1,6 +1,7 @@
 import express from 'express';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { Ollama } from '@langchain/ollama';
+import Groq from 'groq-sdk';
 import { retrieveContext } from '../services/rag.js';
 import { getSettings } from '../services/generator.js';
 import dotenv from 'dotenv';
@@ -12,11 +13,12 @@ const router = express.Router();
 // Initialize AI providers lazily
 let geminiModel = null;
 let ollamaLLM = null;
+let groqClient = null;
 
 function getAIProvider() {
   const settings = getSettings();
   if (settings.localOnlyMode) return 'ollama';
-  return settings.aiProvider || process.env.AI_PROVIDER || 'ollama';
+  return settings.aiProvider || process.env.AI_PROVIDER || 'groq';
 }
 
 function initializeChat() {
@@ -25,12 +27,14 @@ function initializeChat() {
   if (AI_PROVIDER === 'gemini' && !geminiModel) {
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
     geminiModel = genAI.getGenerativeModel({ 
-      model: 'gemini-2.5-flash',
+      model: 'gemini-2.0-flash',
       generationConfig: {
         temperature: 0.7,
-        maxOutputTokens: 1024,
+        maxOutputTokens: 2048,
       },
     });
+  } else if (AI_PROVIDER === 'groq' && !groqClient) {
+    groqClient = new Groq({ apiKey: process.env.GROQ_API_KEY });
   } else if (AI_PROVIDER === 'ollama' && !ollamaLLM) {
     ollamaLLM = new Ollama({
       model: 'qwen3:8b',
@@ -75,6 +79,14 @@ ANSWER:`;
   if (AI_PROVIDER === 'gemini') {
     const result = await geminiModel.generateContent(prompt);
     return result.response.text();
+  } else if (AI_PROVIDER === 'groq') {
+    const completion = await groqClient.chat.completions.create({
+      messages: [{ role: 'user', content: prompt }],
+      model: 'llama-3.3-70b-versatile',
+      temperature: 0.7,
+      max_completion_tokens: 2048,
+    });
+    return completion.choices[0]?.message?.content || '';
   } else {
     return await ollamaLLM.invoke(prompt);
   }
