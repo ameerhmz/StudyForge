@@ -13,10 +13,11 @@ const PORT = process.env.PORT || 3000;
 // Rate limiting middleware - prevent Ollama overload
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // Limit each IP to 100 requests per windowMs
+  max: process.env.NODE_ENV === 'production' ? 100 : 500, // Higher limit for development
   message: 'Too many requests from this IP, please try again later.',
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => req.path === '/api/subjects' || req.path.startsWith('/api/subjects/'), // Skip rate limit for subject fetches
 });
 
 // Middleware
@@ -44,6 +45,7 @@ import teacherRoutes from './routes/teacher.js';
 import subjectsRoutes from './routes/subjects.js';
 import quizzesRoutes from './routes/quizzes.js';
 import flashcardsRoutes from './routes/flashcards.js';
+import analyticsRoutes from './routes/analytics.js';
 
 app.use('/api/auth', authRoutes);
 app.use('/api/upload', uploadRoutes);
@@ -54,6 +56,7 @@ app.use('/api/teacher', teacherRoutes);
 app.use('/api/subjects', subjectsRoutes);
 app.use('/api/quizzes', quizzesRoutes);
 app.use('/api/flashcards', flashcardsRoutes);
+app.use('/api/analytics', analyticsRoutes);
 
 // Global error handler
 app.use((err, req, res, next) => {

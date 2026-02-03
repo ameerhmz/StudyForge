@@ -1,7 +1,8 @@
 import express from 'express';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
-import { eq } from 'drizzle-orm';
+import { OAuth2Client } from 'google-auth-library';
+import { eq, or } from 'drizzle-orm';
 import { db } from '../services/storage.js';
 import * as schema from '../db/schema.js';
 
@@ -12,6 +13,34 @@ const TEACHER_ACCESS_CODE = process.env.TEACHER_ACCESS_CODE || 'TEACH2024';
 
 // JWT secret
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
+
+// Google OAuth client
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
+const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
+
+// Helper to generate JWT and set cookie
+function generateTokenAndSetCookie(res, user) {
+  const token = jwt.sign(
+    { 
+      userId: user.id, 
+      email: user.email, 
+      role: user.role,
+      iat: Math.floor(Date.now() / 1000)
+    },
+    JWT_SECRET,
+    { expiresIn: '7d' }
+  );
+
+  res.cookie('auth_token', token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
+    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    path: '/',
+  });
+
+  return token;
+}
 
 /**
  * POST /api/auth/signup - Register new user (default: student)
@@ -73,31 +102,14 @@ router.post('/signup', async (req, res, next) => {
         email: normalizedEmail,
         name: name.trim(),
         password: hashedPassword,
+        authProvider: 'email',
         role: 'student',
         lastLogin: new Date(),
       })
       .returning();
 
-    // Generate JWT with appropriate expiry
-    const token = jwt.sign(
-      { 
-        userId: newUser.id, 
-        email: newUser.email, 
-        role: newUser.role,
-        iat: Math.floor(Date.now() / 1000)
-      },
-      JWT_SECRET,
-      { expiresIn: '7d' }
-    );
-
-    // Set httpOnly cookie with security flags
-    res.cookie('auth_token', token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-      path: '/',
-    });
+    // Generate JWT and set cookie
+    generateTokenAndSetCookie(res, newUser);
 
     console.log(`✅ New user signed up: ${normalizedEmail} (student)`);
 
@@ -152,6 +164,13 @@ router.post('/login', async (req, res, next) => {
       });
     }
 
+    // Check if this is a Google-only account (no password)
+    if (!user.password && user.authProvider === 'google') {
+      return res.status(401).json({
+        error: { message: 'This account uses Google Sign-In. Please use "Continue with Google" instead.' }
+      });
+    }
+
     // Verify password
     const isValidPassword = await bcrypt.compare(password, user.password);
     if (!isValidPassword) {
@@ -166,26 +185,8 @@ router.post('/login', async (req, res, next) => {
       .set({ lastLogin: new Date() })
       .where(eq(schema.users.id, user.id));
 
-    // Generate JWT
-    const token = jwt.sign(
-      { 
-        userId: user.id, 
-        email: user.email, 
-        role: user.role,
-        iat: Math.floor(Date.now() / 1000)
-      },
-      JWT_SECRET,
-      { expiresIn: '7d' }
-    );
-
-    // Set httpOnly cookie
-    res.cookie('auth_token', token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-      path: '/',
-    });
+    // Generate JWT and set cookie
+    generateTokenAndSetCookie(res, user);
 
     console.log(`✅ User logged in: ${normalizedEmail} (${user.role})`);
 
@@ -198,6 +199,7 @@ router.post('/login', async (req, res, next) => {
           email: user.email,
           name: user.name,
           role: user.role,
+          avatarUrl: user.avatarUrl,
           lastLogin: new Date().toISOString(),
         },
       },
@@ -367,6 +369,128 @@ router.post('/upgrade-to-teacher', async (req, res, next) => {
     });
   } catch (error) {
     console.error('Upgrade error:', error);
+    next(error);
+  }
+});
+
+/**
+ * POST /api/auth/google - Google OAuth login/signup
+ */
+router.post('/google', async (req, res, next) => {
+  try {
+    const { credential } = req.body;
+
+    if (!credential) {
+      return res.status(400).json({
+        error: { message: 'Google credential is required' }
+      });
+    }
+
+    if (!GOOGLE_CLIENT_ID) {
+      return res.status(500).json({
+        error: { message: 'Google OAuth not configured on server' }
+      });
+    }
+
+    // Verify the Google token
+    let payload;
+    try {
+      const ticket = await googleClient.verifyIdToken({
+        idToken: credential,
+        audience: GOOGLE_CLIENT_ID,
+      });
+      payload = ticket.getPayload();
+    } catch (verifyError) {
+      console.error('Google token verification failed:', verifyError);
+      return res.status(401).json({
+        error: { message: 'Invalid Google credential' }
+      });
+    }
+
+    const { sub: googleId, email, name, picture } = payload;
+
+    if (!email) {
+      return res.status(400).json({
+        error: { message: 'Email not provided by Google' }
+      });
+    }
+
+    const normalizedEmail = email.toLowerCase().trim();
+
+    // Check if user exists (by googleId or email)
+    let [existingUser] = await db
+      .select()
+      .from(schema.users)
+      .where(or(
+        eq(schema.users.googleId, googleId),
+        eq(schema.users.email, normalizedEmail)
+      ))
+      .limit(1);
+
+    let user;
+    let isNewUser = false;
+
+    if (existingUser) {
+      // User exists - update last login and possibly link Google ID
+      const updateData = { lastLogin: new Date() };
+      
+      // If user signed up with email but now logging in with Google, link accounts
+      if (!existingUser.googleId && existingUser.authProvider === 'email') {
+        updateData.googleId = googleId;
+        updateData.authProvider = 'google'; // Now they can use either
+        if (picture && !existingUser.avatarUrl) {
+          updateData.avatarUrl = picture;
+        }
+        console.log(`🔗 Linked Google account to existing user: ${normalizedEmail}`);
+      }
+
+      [user] = await db
+        .update(schema.users)
+        .set(updateData)
+        .where(eq(schema.users.id, existingUser.id))
+        .returning();
+    } else {
+      // Create new user with Google
+      isNewUser = true;
+      [user] = await db
+        .insert(schema.users)
+        .values({
+          email: normalizedEmail,
+          name: name || email.split('@')[0],
+          googleId,
+          authProvider: 'google',
+          avatarUrl: picture,
+          role: 'student',
+          lastLogin: new Date(),
+        })
+        .returning();
+      
+      console.log(`✅ New Google user signed up: ${normalizedEmail}`);
+    }
+
+    // Generate JWT and set cookie
+    generateTokenAndSetCookie(res, user);
+
+    console.log(`✅ Google auth successful: ${user.email} (${user.role})`);
+
+    res.json({
+      success: true,
+      message: isNewUser ? 'Account created with Google' : 'Login successful',
+      data: {
+        user: {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          role: user.role,
+          avatarUrl: user.avatarUrl,
+          authProvider: user.authProvider,
+          createdAt: user.createdAt,
+        },
+        isNewUser,
+      },
+    });
+  } catch (error) {
+    console.error('Google auth error:', error);
     next(error);
   }
 });

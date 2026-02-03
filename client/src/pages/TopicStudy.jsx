@@ -16,7 +16,8 @@ export default function TopicStudy() {
   const navigate = useNavigate()
   const { 
     subjects, currentSubject, setCurrentSubject, 
-    topicContent, setTopicContent, markTopicStudied 
+    topicContent, setTopicContent, markTopicStudied,
+    isLoading, fetchSubjects, fetchSubjectDetails
   } = useStore()
   
   const [loading, setLoading] = useState(false)
@@ -26,6 +27,7 @@ export default function TopicStudy() {
   const [askingQuestion, setAskingQuestion] = useState(false)
   const [youtubeQueries, setYoutubeQueries] = useState([])
   const [loadingYoutube, setLoadingYoutube] = useState(false)
+  const [initializing, setInitializing] = useState(true)
 
   // Find subject and topic
   const subject = subjects.find(s => s.id === subjectId) || currentSubject
@@ -35,14 +37,50 @@ export default function TopicStudy() {
   // Get cached AI content
   const cachedContent = topicContent[`${subjectId}-${topicId}`]
 
+  // Initialize: fetch subject if not found
   useEffect(() => {
-    if (subject) {
+    const initializeData = async () => {
+      setInitializing(true)
+      
+      // If subjects are empty, fetch them first
+      if (subjects.length === 0) {
+        await fetchSubjects()
+      }
+      
+      // If subject still not found in local state, try fetching details
+      const foundSubject = subjects.find(s => s.id === subjectId)
+      if (!foundSubject && subjectId) {
+        await fetchSubjectDetails(subjectId)
+      }
+      
+      setInitializing(false)
+    }
+    
+    initializeData()
+  }, [subjectId, subjects.length, fetchSubjects, fetchSubjectDetails])
+
+  // Set current subject when available
+  useEffect(() => {
+    if (subject && !initializing) {
       setCurrentSubject(subject)
     }
-    if (!subject || !topic) {
-      navigate('/dashboard')
+  }, [subject, initializing, setCurrentSubject])
+
+  // Only navigate away if we're done initializing and still no data
+  useEffect(() => {
+    if (!initializing && !isLoading && (!subject || !topic)) {
+      // Give a small delay to ensure state is settled
+      const timeout = setTimeout(() => {
+        const currentSubjectCheck = subjects.find(s => s.id === subjectId)
+        const currentTopicCheck = currentSubjectCheck?.topics?.find(t => t.id === topicId)
+        if (!currentSubjectCheck || !currentTopicCheck) {
+          console.warn('Topic not found after initialization, redirecting to dashboard')
+          navigate('/dashboard')
+        }
+      }, 500)
+      return () => clearTimeout(timeout)
     }
-  }, [subject, topic, navigate, setCurrentSubject])
+  }, [initializing, isLoading, subject, topic, subjects, subjectId, topicId, navigate])
 
   // Generate detailed explanation when first visiting
   useEffect(() => {
@@ -125,10 +163,11 @@ Format the response with clear sections and bullet points.`
     }
   }
 
-  if (!subject || !topic) {
+  if (initializing || isLoading || !subject || !topic) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-black">
+      <div className="min-h-screen flex flex-col items-center justify-center bg-black gap-4">
         <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+        <p className="text-gray-400 text-sm">Loading topic...</p>
       </div>
     )
   }

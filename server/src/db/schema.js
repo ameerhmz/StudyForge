@@ -18,7 +18,9 @@ export const users = pgTable('users', {
     id: uuid('id').defaultRandom().primaryKey(),
     email: text('email').notNull().unique(),
     name: text('name').notNull(),
-    password: text('password').notNull(),
+    password: text('password'), // Nullable for OAuth users
+    googleId: text('google_id'), // Google OAuth ID (nullable, not unique initially)
+    authProvider: text('auth_provider').default('email').notNull(), // 'email', 'google'
     role: text('role').default('student').notNull(), // 'student', 'teacher'
     avatarUrl: text('avatar_url'),
     createdAt: timestamp('created_at').defaultNow(),

@@ -41,9 +41,37 @@ router.get('/', async (req, res, next) => {
       .where(eq(schema.subjects.userId, user.id))
       .orderBy(desc(schema.subjects.createdAt));
 
+    // Format subjects for frontend
+    const formattedSubjects = userSubjects.map(subject => {
+      // Extract topics from syllabusData if available
+      let topics = [];
+      if (subject.syllabusData?.units) {
+        subject.syllabusData.units.forEach((unit, unitIndex) => {
+          (unit.topics || []).forEach((topic, topicIndex) => {
+            topics.push({
+              id: `${subject.id}-${unitIndex}-${topicIndex}`,
+              name: topic.title || topic.name || topic,
+              title: topic.title || topic.name || topic,
+              description: topic.description || '',
+              difficulty: topic.difficulty || 'medium',
+              status: 'not_started',
+            });
+          });
+        });
+      }
+
+      return {
+        ...subject,
+        emoji: subject.icon || '📚',
+        gradient: 'from-blue-500 to-blue-600',
+        content: subject.description,
+        topics,
+      };
+    });
+
     res.json({
       success: true,
-      data: userSubjects,
+      data: formattedSubjects,
     });
   } catch (error) {
     console.error('Get subjects error:', error);
@@ -81,6 +109,21 @@ router.get('/:id', async (req, res, next) => {
       .where(eq(schema.topics.subjectId, subject.id))
       .orderBy(schema.topics.unitIndex, schema.topics.topicIndex);
 
+    // Transform topics to match frontend format
+    const formattedTopics = subjectTopics.map(t => ({
+      id: t.id,
+      name: t.title,
+      title: t.title,
+      description: t.description,
+      difficulty: t.difficulty,
+      status: t.status,
+      estimatedMinutes: t.estimatedMinutes,
+      unitIndex: t.unitIndex,
+      topicIndex: t.topicIndex,
+      completedAt: t.completedAt,
+      createdAt: t.createdAt,
+    }));
+
     // Get quizzes for this subject
     const subjectQuizzes = await db
       .select()
@@ -95,11 +138,33 @@ router.get('/:id', async (req, res, next) => {
       .where(eq(schema.flashcardDecks.subjectId, subject.id))
       .orderBy(desc(schema.flashcardDecks.createdAt));
 
+    // Also include topics from syllabusData if no topics in database
+    let topics = formattedTopics;
+    if (topics.length === 0 && subject.syllabusData?.units) {
+      topics = [];
+      subject.syllabusData.units.forEach((unit, unitIndex) => {
+        (unit.topics || []).forEach((topic, topicIndex) => {
+          topics.push({
+            id: `${subject.id}-${unitIndex}-${topicIndex}`,
+            name: topic.title || topic.name || topic,
+            title: topic.title || topic.name || topic,
+            description: topic.description || '',
+            difficulty: topic.difficulty || 'medium',
+            status: 'not_started',
+            unitIndex,
+            topicIndex,
+          });
+        });
+      });
+    }
+
     res.json({
       success: true,
       data: {
         ...subject,
-        topics: subjectTopics,
+        emoji: subject.icon,
+        gradient: `from-blue-500 to-blue-600`, // Default gradient
+        topics,
         quizzes: subjectQuizzes,
         flashcardDecks: subjectFlashcardDecks,
       },
@@ -275,6 +340,7 @@ router.delete('/:id', async (req, res, next) => {
 
 /**
  * PATCH /api/subjects/:subjectId/topics/:topicId - Update topic status
+ * Supports both UUID topic IDs and synthetic IDs (subjectId-unitIndex-topicIndex)
  */
 router.patch('/:subjectId/topics/:topicId', async (req, res, next) => {
   try {
@@ -284,13 +350,14 @@ router.patch('/:subjectId/topics/:topicId', async (req, res, next) => {
     }
 
     const { status } = req.body;
+    const { subjectId, topicId } = req.params;
 
     // Verify subject ownership
     const [subject] = await db
       .select()
       .from(schema.subjects)
       .where(and(
-        eq(schema.subjects.id, req.params.subjectId),
+        eq(schema.subjects.id, subjectId),
         eq(schema.subjects.userId, user.id)
       ))
       .limit(1);
@@ -307,14 +374,64 @@ router.patch('/:subjectId/topics/:topicId', async (req, res, next) => {
       }
     }
 
-    const [updatedTopic] = await db
-      .update(schema.topics)
-      .set(updateData)
-      .where(and(
-        eq(schema.topics.id, req.params.topicId),
-        eq(schema.topics.subjectId, req.params.subjectId)
-      ))
-      .returning();
+    let updatedTopic = null;
+
+    // Check if topicId is a synthetic ID (format: subjectId-unitIndex-topicIndex)
+    const syntheticIdMatch = topicId.match(/^(.+)-(\d+)-(\d+)$/);
+    
+    if (syntheticIdMatch) {
+      // It's a synthetic ID - try to find topic by unitIndex and topicIndex
+      const unitIndex = parseInt(syntheticIdMatch[2], 10);
+      const topicIndex = parseInt(syntheticIdMatch[3], 10);
+
+      // First, try to find existing topic in database
+      const [existingTopic] = await db
+        .select()
+        .from(schema.topics)
+        .where(and(
+          eq(schema.topics.subjectId, subjectId),
+          eq(schema.topics.unitIndex, unitIndex),
+          eq(schema.topics.topicIndex, topicIndex)
+        ))
+        .limit(1);
+
+      if (existingTopic) {
+        // Update existing topic
+        [updatedTopic] = await db
+          .update(schema.topics)
+          .set(updateData)
+          .where(eq(schema.topics.id, existingTopic.id))
+          .returning();
+      } else {
+        // Topic doesn't exist in DB - create it from syllabusData
+        if (subject.syllabusData?.units?.[unitIndex]?.topics?.[topicIndex]) {
+          const topicData = subject.syllabusData.units[unitIndex].topics[topicIndex];
+          [updatedTopic] = await db
+            .insert(schema.topics)
+            .values({
+              subjectId,
+              unitIndex,
+              topicIndex,
+              title: topicData.title || topicData.name || topicData,
+              description: topicData.description || '',
+              difficulty: topicData.difficulty || 'medium',
+              estimatedMinutes: topicData.estimatedMinutes || 30,
+              ...updateData,
+            })
+            .returning();
+        }
+      }
+    } else {
+      // It's a UUID - try direct lookup
+      [updatedTopic] = await db
+        .update(schema.topics)
+        .set(updateData)
+        .where(and(
+          eq(schema.topics.id, topicId),
+          eq(schema.topics.subjectId, subjectId)
+        ))
+        .returning();
+    }
 
     if (!updatedTopic) {
       return res.status(404).json({ error: { message: 'Topic not found' } });
@@ -325,14 +442,14 @@ router.patch('/:subjectId/topics/:topicId', async (req, res, next) => {
       .select()
       .from(schema.topics)
       .where(and(
-        eq(schema.topics.subjectId, req.params.subjectId),
+        eq(schema.topics.subjectId, subjectId),
         eq(schema.topics.status, 'completed')
       ));
 
     await db
       .update(schema.subjects)
       .set({ completedTopics: completedCount.length })
-      .where(eq(schema.subjects.id, req.params.subjectId));
+      .where(eq(schema.subjects.id, subjectId));
 
     res.json({
       success: true,

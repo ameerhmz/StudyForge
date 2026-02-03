@@ -673,66 +673,95 @@ export async function generateStudyPlan(topics, examDate, dailyHours, weakTopics
     const daysUntilExam = Math.ceil((new Date(examDate) - new Date()) / (1000 * 60 * 60 * 24));
     const totalHours = daysUntilExam * dailyHours;
 
-    const prompt = `Create a study plan for an upcoming exam.
+    // Handle different topic formats from frontend
+    const topicsList = topics.map(t => ({
+      name: t.name || t.title || t,
+      difficulty: t.difficulty || 'medium',
+      importance: t.importance || 'medium'
+    }));
+
+    // Handle weakTopics as strings or objects
+    const weakTopicNames = weakTopics.map(w => typeof w === 'string' ? w : (w.name || w.topic || w));
+
+    const prompt = `Create a detailed study plan for an upcoming exam.
 
 Topics to cover:
-${JSON.stringify(topics.map(t => ({
-      title: t.title,
-      difficulty: t.difficulty,
-      importance: t.importance,
-      studyTime: t.studyTime,
-      examWeight: t.examWeight
-    })), null, 2)}
+${topicsList.map(t => `- ${t.name} (Difficulty: ${t.difficulty}, Importance: ${t.importance})`).join('\n')}
 
-Weak topics that need extra attention:
-${weakTopics.map(w => w.topic).join(', ') || 'None identified yet'}
+Weak topics that need extra attention: ${weakTopicNames.length > 0 ? weakTopicNames.join(', ') : 'None identified yet'}
 
 Exam Date: ${examDate}
 Days until exam: ${daysUntilExam}
 Daily study hours available: ${dailyHours}
 Total hours available: ${totalHours}
 
-Generate a JSON study plan:
+Generate a JSON study plan with this EXACT structure:
 {
-  "overview": {
-    "totalDays": ${daysUntilExam},
-    "totalHours": ${totalHours},
-    "strategy": "Brief strategy description"
-  },
-  "phases": [
-    {
-      "name": "Phase name",
-      "days": "Day 1-3",
-      "focus": "What to focus on",
-      "topics": ["topic1", "topic2"],
-      "goals": ["goal1", "goal2"]
-    }
-  ],
-  "dailySchedule": [
+  "totalDays": ${daysUntilExam},
+  "totalHours": ${totalHours},
+  "strategy": "Brief description of your study strategy",
+  "schedule": [
     {
       "day": 1,
-      "date": "YYYY-MM-DD",
+      "date": "${new Date(Date.now() + 86400000).toISOString().split('T')[0]}",
+      "hours": ${dailyHours},
       "topics": [
-        {"topic": "Topic name", "duration": "1 hour", "activity": "Read + Notes"}
+        {
+          "name": "Topic name here",
+          "duration": "1.5h",
+          "type": "study",
+          "priority": "high"
+        }
       ],
-      "totalHours": ${dailyHours}
+      "activities": ["study", "practice"]
     }
   ],
-  "tips": ["Study tip 1", "Study tip 2"]
+  "tips": [
+    "Specific study tip 1",
+    "Specific study tip 2",
+    "Specific study tip 3"
+  ]
 }
 
-RULES:
-- Prioritize weak topics and high-importance topics
-- Leave last 1-2 days for revision only
-- Include breaks and varied activities
-- Return ONLY valid JSON`;
+IMPORTANT RULES:
+1. Prioritize weak topics and high-importance topics early
+2. Leave last 1-2 days for revision only (type: "review")
+3. Include variety: study, practice, quiz activities
+4. Mark weak topics with priority: "high"
+5. Each day should have ${dailyHours} hours total
+6. Generate schedule for all ${daysUntilExam} days
+7. Return ONLY valid JSON, no extra text`;
 
     const response = await generateText(prompt);
     const jsonStr = extractJSON(response);
     const parsed = JSON.parse(jsonStr);
 
-    console.log('✅ Generated study plan');
-    return parsed;
+    // Ensure the response has required fields
+    const result = {
+      totalDays: parsed.totalDays || daysUntilExam,
+      totalHours: parsed.totalHours || totalHours,
+      strategy: parsed.strategy || 'Focus on weak areas first, then review',
+      schedule: parsed.schedule || parsed.dailySchedule || [],
+      tips: parsed.tips || ['Take regular breaks', 'Review before sleeping', 'Stay hydrated']
+    };
+
+    // Add dates to schedule if missing
+    result.schedule = result.schedule.map((day, index) => ({
+      ...day,
+      day: day.day || index + 1,
+      date: day.date || new Date(Date.now() + (index + 1) * 86400000).toISOString().split('T')[0],
+      hours: day.hours || day.totalHours || dailyHours,
+      topics: (day.topics || []).map(t => ({
+        name: t.name || t.topic || t,
+        duration: t.duration || '1h',
+        type: t.type || t.activity || 'study',
+        priority: t.priority || 'normal'
+      })),
+      activities: day.activities || ['study']
+    }));
+
+    console.log('✅ Generated study plan with', result.schedule.length, 'days');
+    return result;
   } catch (error) {
     console.error('Error generating study plan:', error.message);
     throw new Error(`Failed to generate study plan: ${error.message}`);

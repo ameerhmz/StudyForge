@@ -4,7 +4,7 @@ import { motion } from 'framer-motion'
 import { 
   Sparkles, ArrowLeft, BookOpen, ClipboardCheck, Layers, 
   MessageCircle, Target, CheckCircle, Play, ChevronRight,
-  Zap, AlertTriangle, Calendar
+  Zap, AlertTriangle, Calendar, Loader2
 } from 'lucide-react'
 import { cn } from '../lib/utils'
 import useStore from '../store/useStore'
@@ -29,29 +29,70 @@ export default function StudyRoom() {
   const { subjectId, documentId } = useParams()
   const id = subjectId || documentId // Support both routes
   const navigate = useNavigate()
-  const { subjects, currentSubject, setCurrentSubject, topicProgress } = useStore()
+  const { subjects, currentSubject, setCurrentSubject, topicProgress, fetchSubjectDetails, fetchSubjects, isLoading } = useStore()
   const [activeTab, setActiveTab] = useState('topics')
+  const [loading, setLoading] = useState(true)
+  const [initialized, setInitialized] = useState(false)
 
   useEffect(() => {
-    const subject = subjects.find(s => s.id === id)
-    if (subject) {
-      setCurrentSubject(subject)
-    } else {
-      navigate('/dashboard')
+    const loadSubject = async () => {
+      setLoading(true)
+      
+      // If subjects are empty, fetch them first
+      if (subjects.length === 0) {
+        await fetchSubjects()
+      }
+      
+      // Find subject in local state
+      let subject = subjects.find(s => s.id === id)
+      
+      if (subject) {
+        setCurrentSubject(subject)
+        
+        // Fetch full details from database (includes topics, quizzes, flashcards)
+        const fullDetails = await fetchSubjectDetails(id)
+        
+        if (fullDetails) {
+          setCurrentSubject({ ...subject, ...fullDetails })
+        }
+        setLoading(false)
+        setInitialized(true)
+      } else {
+        // Subject not found - wait a bit and check again to handle race conditions
+        setLoading(false)
+        setInitialized(true)
+      }
     }
-  }, [id, subjects, navigate, setCurrentSubject])
+    
+    loadSubject()
+  }, [id, subjects.length, fetchSubjects, fetchSubjectDetails, setCurrentSubject])
 
-  if (!currentSubject) {
+  // Only navigate away after fully initialized and still no subject
+  useEffect(() => {
+    if (initialized && !loading && !isLoading) {
+      const subject = subjects.find(s => s.id === id)
+      if (!subject && !currentSubject) {
+        console.warn('Subject not found, redirecting to dashboard')
+        navigate('/dashboard')
+      }
+    }
+  }, [initialized, loading, isLoading, subjects, id, currentSubject, navigate])
+
+  if (loading || isLoading || !currentSubject) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-black">
+      <div className="min-h-screen flex flex-col items-center justify-center bg-black gap-4">
         <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+        <p className="text-gray-400 text-sm">Loading subject...</p>
       </div>
     )
   }
 
   const topics = currentSubject.topics || []
   const progress = topicProgress[currentSubject.id] || {}
-  const studiedCount = Object.values(progress).filter(p => p.studied).length
+  // Count studied topics from both local progress AND database status
+  const studiedCount = topics.filter(topic => 
+    progress[topic.id]?.studied || topic.status === 'completed'
+  ).length
 
   const handleStudyTopic = (topic) => {
     navigate(`/subject/${id}/topic/${topic.id}`)
@@ -166,7 +207,8 @@ export default function StudyRoom() {
               ) : (
                 <div className="grid gap-4">
                   {topics.map((topic, index) => {
-                    const isStudied = progress[topic.id]?.studied
+                    // Check both local progress and database status
+                    const isStudied = progress[topic.id]?.studied || topic.status === 'completed'
                     return (
                       <motion.button
                         key={topic.id}

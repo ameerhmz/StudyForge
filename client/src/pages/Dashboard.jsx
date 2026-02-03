@@ -1,10 +1,10 @@
 import { Link, useNavigate } from 'react-router-dom';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Sparkles, Plus, Trash2, GraduationCap, 
   BarChart3, Target, Layers, ArrowRight, X,
-  Upload, Settings as SettingsIcon, LogOut, Crown
+  Upload, Settings as SettingsIcon, LogOut, Crown, RefreshCw, PieChart
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import useStore from '../store/useStore';
@@ -12,17 +12,26 @@ import useAuthStore from '../store/useAuthStore';
 import { demoSubjects } from '../lib/demoData';
 import PDFUpload from '../components/PDFUpload';
 import TeacherUpgradeModal from '../components/TeacherUpgradeModal';
+import Analytics from '../components/Analytics';
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const { subjects, addSubject, removeSubject, setCurrentSubject, getStats } = useStore();
+  const { subjects, addSubject, removeSubject, setCurrentSubject, getStats, fetchSubjects, isLoading } = useStore();
   const { user, logout } = useAuthStore();
   const [showModal, setShowModal] = useState(false);
   const [modalTab, setModalTab] = useState('create'); // 'create' | 'upload' | 'demo'
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [newSubjectName, setNewSubjectName] = useState('');
   const [newSubjectEmoji, setNewSubjectEmoji] = useState('📚');
+  const [activeTab, setActiveTab] = useState('subjects'); // 'subjects' | 'analytics'
   const stats = getStats();
+
+  // Fetch subjects from database on mount
+  useEffect(() => {
+    if (user) {
+      fetchSubjects();
+    }
+  }, [user, fetchSubjects]);
 
   const handleLogout = async () => {
     await logout();
@@ -141,43 +150,96 @@ export default function Dashboard() {
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="mb-12"
+          className="mb-8"
         >
-          <h1 className="text-4xl font-bold text-white mb-3">Your Subjects 📚</h1>
-          <p className="text-gray-400 text-lg">Select a subject to study topics, take quizzes, or review flashcards.</p>
+          <h1 className="text-4xl font-bold text-white mb-3">
+            {activeTab === 'subjects' ? 'Your Subjects 📚' : 'Analytics & Progress 📊'}
+          </h1>
+          <p className="text-gray-400 text-lg">
+            {activeTab === 'subjects' 
+              ? 'Select a subject to study topics, take quizzes, or review flashcards.'
+              : 'Track your learning progress, identify weak areas, and improve your study habits.'}
+          </p>
         </motion.div>
 
-        {/* Stats */}
+        {/* Tab Switcher */}
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="grid grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6 mb-16"
+          transition={{ delay: 0.05 }}
+          className="flex gap-2 mb-8"
         >
-          {statCards.map((stat, i) => (
-            <div key={i} className="card card-hover p-6 stat-card">
-              <div className={cn(
-                "w-12 h-12 rounded-xl bg-gradient-to-br flex items-center justify-center mb-4",
-                stat.gradient
-              )}>
-                <stat.icon className="w-5 h-5 text-white" />
+          <button
+            onClick={() => setActiveTab('subjects')}
+            className={cn(
+              "flex items-center gap-2 px-5 py-2.5 rounded-xl font-medium transition-all",
+              activeTab === 'subjects'
+                ? "bg-gradient-to-r from-blue-500 to-cyan-500 text-white shadow-lg shadow-blue-500/25"
+                : "bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white"
+            )}
+          >
+            <GraduationCap className="w-4 h-4" />
+            My Subjects
+          </button>
+          <button
+            onClick={() => setActiveTab('analytics')}
+            className={cn(
+              "flex items-center gap-2 px-5 py-2.5 rounded-xl font-medium transition-all",
+              activeTab === 'analytics'
+                ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg shadow-purple-500/25"
+                : "bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white"
+            )}
+          >
+            <PieChart className="w-4 h-4" />
+            Analytics
+          </button>
+        </motion.div>
+
+        {/* Analytics Tab */}
+        {activeTab === 'analytics' && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+          >
+            <Analytics />
+          </motion.div>
+        )}
+
+        {/* Subjects Tab */}
+        {activeTab === 'subjects' && (
+          <>
+            {/* Stats */}
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 }}
+              className="grid grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6 mb-16"
+            >
+              {statCards.map((stat, i) => (
+                <div key={i} className="card card-hover p-6 stat-card">
+                  <div className={cn(
+                    "w-12 h-12 rounded-xl bg-gradient-to-br flex items-center justify-center mb-4",
+                    stat.gradient
+                  )}>
+                    <stat.icon className="w-5 h-5 text-white" />
+                  </div>
+                  <div className="text-3xl font-bold text-white mb-1">{stat.value}</div>
+                  <div className="text-gray-400 text-sm">{stat.label}</div>
+                </div>
+              ))}
+            </motion.div>
+
+            {/* Subjects Grid */}
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 }}
+            >
+              <div className="flex items-center justify-between mb-8">
+                <h2 className="text-2xl font-bold text-white">My Subjects</h2>
+                <span className="text-sm text-gray-500">{subjects.length} subjects</span>
               </div>
-              <div className="text-3xl font-bold text-white mb-1">{stat.value}</div>
-              <div className="text-gray-400 text-sm">{stat.label}</div>
-            </div>
-          ))}
-        </motion.div>
-
-        {/* Subjects Grid */}
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-        >
-          <div className="flex items-center justify-between mb-8">
-            <h2 className="text-2xl font-bold text-white">My Subjects</h2>
-            <span className="text-sm text-gray-500">{subjects.length} subjects</span>
-          </div>
 
           {subjects.length === 0 ? (
             <div className="card p-16 text-center">
@@ -244,6 +306,8 @@ export default function Dashboard() {
             </div>
           )}
         </motion.div>
+          </>
+        )}
       </main>
 
       {/* Modal */}
