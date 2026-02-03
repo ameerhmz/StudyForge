@@ -4,6 +4,8 @@ import { Sparkles, RefreshCw, Check, X, ClipboardCheck } from 'lucide-react'
 import { cn } from '../lib/utils'
 import { generateQuiz } from '../lib/api'
 import useStore from '../store/useStore'
+import { toast } from 'sonner'
+import Skeleton from './Skeleton'
 
 export default function QuizTab({ document }) {
   const { quizzes, setQuiz, updateQuizScore } = useStore()
@@ -29,13 +31,14 @@ export default function QuizTab({ document }) {
     setQuizComplete(false)
 
     try {
-      const result = await generateQuiz(document.content, { 
-        difficulty, 
-        questionCount: count 
+      const result = await generateQuiz(document.content, {
+        difficulty,
+        questionCount: count
       })
       setQuiz(document.id, result)
+      toast.success('Quiz generated! Good luck.')
     } catch (err) {
-      setError(err.message)
+      toast.error(err.message || 'Failed to generate quiz')
     } finally {
       setLoading(false)
     }
@@ -100,8 +103,8 @@ export default function QuizTab({ document }) {
                       "flex-1 py-3 px-4 rounded-xl font-medium capitalize transition-all",
                       difficulty === level
                         ? level === 'easy' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 neon-green'
-                        : level === 'medium' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30 neon-amber'
-                        : 'bg-red-500/20 text-red-400 border border-red-500/30'
+                          : level === 'medium' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30 neon-amber'
+                            : 'bg-red-500/20 text-red-400 border border-red-500/30'
                         : 'bg-white/5 text-gray-400 border border-white/10 hover:bg-white/10'
                     )}
                   >
@@ -136,11 +139,11 @@ export default function QuizTab({ document }) {
             </div>
           )}
 
-          <button onClick={handleGenerate} disabled={loading} className="btn btn-primary shimmer-button">
+          <button onClick={handleGenerate} disabled={loading} className="btn btn-primary shimmer-button px-8">
             {loading ? (
               <>
                 <RefreshCw className="w-4 h-4 animate-spin" />
-                Generating Quiz...
+                Forgeing Quiz...
               </>
             ) : (
               <>
@@ -150,6 +153,21 @@ export default function QuizTab({ document }) {
             )}
           </button>
         </div>
+
+        {loading && (
+          <div className="card p-8 lg:p-10 animate-fade-in">
+            <Skeleton variant="title" className="w-1/3" />
+            <div className="space-y-4">
+              <Skeleton variant="rectangle" className="h-12" />
+              <Skeleton variant="rectangle" className="h-12" />
+              <Skeleton variant="rectangle" className="h-12" />
+              <Skeleton variant="rectangle" className="h-12" />
+            </div>
+            <div className="flex justify-end mt-8">
+              <Skeleton variant="rectangle" className="w-32 h-10" />
+            </div>
+          </div>
+        )}
       </div>
     )
   }
@@ -159,9 +177,9 @@ export default function QuizTab({ document }) {
     const totalQuestions = quiz.questions.length
     const scoreValue = getScore()
     const percentage = Math.round((scoreValue / totalQuestions) * 100)
-    
+
     return (
-      <motion.div 
+      <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         className="card p-12 lg:p-16 text-center"

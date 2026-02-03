@@ -55,7 +55,7 @@ function initializeProviders() {
       throw new Error('GEMINI_API_KEY not found in environment variables');
     }
     const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-    geminiModel = genAI.getGenerativeModel({ 
+    geminiModel = genAI.getGenerativeModel({
       model: 'gemini-2.0-flash',
       generationConfig: {
         temperature: 0.7,
@@ -178,7 +178,7 @@ function extractJSON(response) {
     // Count brackets to attempt repair
     let openBraces = 0, openBrackets = 0;
     let inString = false, escapeNext = false;
-    
+
     for (const char of jsonStr) {
       if (escapeNext) { escapeNext = false; continue; }
       if (char === '\\') { escapeNext = true; continue; }
@@ -189,7 +189,7 @@ function extractJSON(response) {
       if (char === '[') openBrackets++;
       if (char === ']') openBrackets--;
     }
-    
+
     // Add missing closing brackets/braces
     while (openBrackets > 0) { jsonStr += ']'; openBrackets--; }
     while (openBraces > 0) { jsonStr += '}'; openBraces--; }
@@ -428,7 +428,7 @@ RULES:
 
     const response = await generateText(prompt);
     console.log('📝 AI response length:', response.length);
-    
+
     const jsonStr = extractJSON(response);
 
     let parsed;
@@ -438,13 +438,7 @@ RULES:
       console.error('JSON parsing failed. Raw response:', response.substring(0, 500));
       throw new Error(`Invalid JSON from AI: ${parseError.message}`);
     }
-<<<<<<< HEAD
-
-    // Ensure topics have IDs
-=======
-    
     // Ensure topics have IDs and week numbers
->>>>>>> bc44d3e (feat: Add Groq AI integration, YouTube suggestions, Settings page, and bug fixes)
     if (parsed.topics) {
       parsed.topics = parsed.topics.map((topic, index) => ({
         ...topic,

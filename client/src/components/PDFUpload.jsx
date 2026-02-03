@@ -2,6 +2,7 @@ import React, { useState, useCallback } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { Upload, FileText, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
 import useStore from '../store/useStore';
+import { toast } from 'sonner';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
@@ -63,6 +64,7 @@ function PDFUpload({ onUploadComplete }) {
       setProgress(100);
       setStatus('success');
       setMessage(`Successfully created "${subjectName}" with ${newSubject.topics.length} topics`);
+      toast.success(`Success! "${subjectName}" is ready.`);
 
       if (onUploadComplete) {
         onUploadComplete(newSubject);
@@ -71,6 +73,7 @@ function PDFUpload({ onUploadComplete }) {
       console.error('Upload error:', error);
       setStatus('error');
       setMessage(error.message || 'Failed to upload PDF');
+      toast.error(error.message || 'Upload failed');
     } finally {
       setUploading(false);
     }
@@ -101,15 +104,15 @@ function PDFUpload({ onUploadComplete }) {
         className={`
           border-2 border-dashed rounded-xl p-8 text-center cursor-pointer
           transition-all duration-200
-          ${isDragActive 
-            ? 'border-blue-500 bg-blue-500/10' 
+          ${isDragActive
+            ? 'border-blue-500 bg-blue-500/10'
             : 'border-gray-600 hover:border-gray-500 bg-gray-800/50'
           }
           ${uploading ? 'pointer-events-none opacity-60' : ''}
         `}
       >
         <input {...getInputProps()} />
-        
+
         <div className="flex flex-col items-center gap-4">
           {uploading ? (
             <Loader2 className="w-12 h-12 text-blue-500 animate-spin" />
@@ -120,7 +123,7 @@ function PDFUpload({ onUploadComplete }) {
           ) : (
             <Upload className={`w-12 h-12 ${isDragActive ? 'text-blue-500' : 'text-gray-500'}`} />
           )}
-          
+
           <div>
             {uploading ? (
               <p className="text-gray-300">{message}</p>
@@ -141,11 +144,11 @@ function PDFUpload({ onUploadComplete }) {
               </>
             )}
           </div>
-          
+
           {uploading && (
             <div className="w-full max-w-xs">
               <div className="h-2 bg-gray-700 rounded-full overflow-hidden">
-                <div 
+                <div
                   className="h-full bg-blue-500 rounded-full transition-all duration-300"
                   style={{ width: `${progress}%` }}
                 />

@@ -4,6 +4,8 @@ import { Send, Bot, User, MessageCircle, Trash2 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import { cn } from '../lib/utils'
 import { chatWithDocument } from '../lib/api'
+import { toast } from 'sonner'
+import Skeleton from './Skeleton'
 
 export default function ChatTab({ document }) {
   const [messages, setMessages] = useState([])
@@ -102,10 +104,10 @@ export default function ChatTab({ document }) {
             </div>
             <h3 className="text-xl font-bold text-white mb-3">Start a Conversation</h3>
             <p className="text-gray-400 mb-8 max-w-md">
-              Ask me anything about <span className="text-blue-300 font-medium">{document.name}</span>. 
+              Ask me anything about <span className="text-blue-300 font-medium">{document.name}</span>.
               I can help explain concepts, summarize content, or answer specific questions.
             </p>
-            
+
             <div className="flex flex-wrap justify-center gap-2 max-w-lg">
               {suggestedQuestions.map((q, i) => (
                 <button
@@ -162,9 +164,9 @@ export default function ChatTab({ document }) {
                 </div>
               </motion.div>
             ))}
-            
+
             {loading && (
-              <motion.div 
+              <motion.div
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 className="flex gap-4"
@@ -172,17 +174,10 @@ export default function ChatTab({ document }) {
                 <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
                   <Bot className="w-5 h-5" />
                 </div>
-                <div className="p-4 rounded-2xl bg-white/5 max-w-[80%]">
-                  <div className="flex gap-1.5">
-                    {[0, 1, 2].map((i) => (
-                      <motion.span
-                        key={i}
-                        animate={{ y: [0, -6, 0] }}
-                        transition={{ repeat: Infinity, duration: 0.8, delay: i * 0.15 }}
-                        className="w-2 h-2 rounded-full bg-blue-400"
-                      />
-                    ))}
-                  </div>
+                <div className="p-4 rounded-2xl bg-white/5 max-w-[80%] flex-1">
+                  <Skeleton variant="title" className="w-1/2" />
+                  <Skeleton variant="text" />
+                  <Skeleton variant="text" className="w-5/6" />
                 </div>
               </motion.div>
             )}

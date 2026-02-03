@@ -1,8 +1,8 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  Sparkles, Plus, Trash2, GraduationCap, 
+import {
+  Sparkles, Plus, Trash2, GraduationCap,
   BarChart3, Target, Layers, ArrowRight, X,
   Upload, Settings as SettingsIcon, LogOut, Crown
 } from 'lucide-react';
@@ -12,6 +12,7 @@ import useAuthStore from '../store/useAuthStore';
 import { demoSubjects } from '../lib/demoData';
 import PDFUpload from '../components/PDFUpload';
 import TeacherUpgradeModal from '../components/TeacherUpgradeModal';
+import { toast } from 'sonner';
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -26,6 +27,7 @@ export default function Dashboard() {
 
   const handleLogout = async () => {
     await logout();
+    toast.success('Logged out successfully');
     navigate('/login');
   };
 
@@ -42,7 +44,7 @@ export default function Dashboard() {
 
   const handleAddSubject = () => {
     if (!newSubjectName.trim()) return
-    
+
     const newSubject = {
       name: newSubjectName.trim(),
       emoji: newSubjectEmoji,
@@ -50,11 +52,12 @@ export default function Dashboard() {
       content: `Study material for ${newSubjectName}`,
       topics: []
     }
-    
+
     addSubject(newSubject)
     setNewSubjectName('')
     setNewSubjectEmoji('📚')
     setShowModal(false)
+    toast.success('Subject created!')
   }
 
   const handleSelectDemo = (demo) => {
@@ -138,7 +141,7 @@ export default function Dashboard() {
 
       <main className="relative max-w-7xl mx-auto px-6 lg:px-8 py-12">
         {/* Welcome */}
-        <motion.div 
+        <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           className="mb-12"
@@ -148,7 +151,7 @@ export default function Dashboard() {
         </motion.div>
 
         {/* Stats */}
-        <motion.div 
+        <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
@@ -169,7 +172,7 @@ export default function Dashboard() {
         </motion.div>
 
         {/* Subjects Grid */}
-        <motion.div 
+        <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2 }}
@@ -223,7 +226,11 @@ export default function Dashboard() {
                   </div>
 
                   <button
-                    onClick={(e) => { e.stopPropagation(); removeSubject(subject.id) }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      removeSubject(subject.id);
+                      toast.success('Subject removed');
+                    }}
                     className="absolute top-4 right-4 p-2 rounded-lg bg-red-500/10 text-red-400 opacity-0 group-hover:opacity-100 hover:bg-red-500/20 transition-all"
                   >
                     <Trash2 className="w-4 h-4" />
@@ -249,14 +256,14 @@ export default function Dashboard() {
       {/* Modal */}
       <AnimatePresence>
         {showModal && (
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-50 flex items-center justify-center p-4"
           >
             <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setShowModal(false)} />
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
@@ -310,7 +317,7 @@ export default function Dashboard() {
                       className="input flex-1"
                       onKeyDown={(e) => e.key === 'Enter' && handleAddSubject()}
                     />
-                    <button 
+                    <button
                       onClick={handleAddSubject}
                       disabled={!newSubjectName.trim()}
                       className="btn btn-primary"
@@ -318,7 +325,7 @@ export default function Dashboard() {
                       Add
                     </button>
                   </div>
-                  
+
                   {/* Emoji Picker */}
                   <div className="flex flex-wrap gap-2">
                     {emojis.map((e) => (
@@ -327,8 +334,8 @@ export default function Dashboard() {
                         onClick={() => setNewSubjectEmoji(e)}
                         className={cn(
                           "w-10 h-10 rounded-lg flex items-center justify-center text-lg transition-all",
-                          newSubjectEmoji === e 
-                            ? "bg-blue-500/30 ring-2 ring-blue-500" 
+                          newSubjectEmoji === e
+                            ? "bg-blue-500/30 ring-2 ring-blue-500"
                             : "bg-white/5 hover:bg-white/10"
                         )}
                       >
@@ -341,11 +348,11 @@ export default function Dashboard() {
 
               {/* Upload PDF */}
               {modalTab === 'upload' && (
-                <PDFUpload 
+                <PDFUpload
                   onUploadComplete={(subject) => {
                     setShowModal(false);
                     navigate(`/subject/${subject.id}`);
-                  }} 
+                  }}
                 />
               )}
 
@@ -379,7 +386,7 @@ export default function Dashboard() {
           </motion.div>
         )}
       </AnimatePresence>
-      
+
       {/* Teacher Upgrade Modal */}
       <TeacherUpgradeModal isOpen={showUpgradeModal} onClose={() => setShowUpgradeModal(false)} />
     </div>

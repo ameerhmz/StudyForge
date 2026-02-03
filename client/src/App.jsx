@@ -11,6 +11,7 @@ import StudentDetailView from './pages/StudentDetailView';
 import Settings from './pages/Settings';
 import ProtectedRoute from './components/ProtectedRoute';
 import useAuthStore from './store/useAuthStore';
+import { Toaster } from 'sonner';
 
 export default function App() {
   const { checkAuth } = useAuthStore();
@@ -21,11 +22,12 @@ export default function App() {
 
   return (
     <BrowserRouter>
+      <Toaster position="top-center" richColors />
       <Routes>
         <Route path="/" element={<Landing />} />
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
-        
+
         {/* Protected Routes */}
         <Route
           path="/dashboard"
@@ -51,7 +53,7 @@ export default function App() {
             </ProtectedRoute>
           }
         />
-        
+
         {/* Settings Route */}
         <Route
           path="/settings"
@@ -61,7 +63,7 @@ export default function App() {
             </ProtectedRoute>
           }
         />
-        
+
         {/* Teacher-only Routes */}
         <Route
           path="/teacher"
@@ -79,7 +81,7 @@ export default function App() {
             </ProtectedRoute>
           }
         />
-        
+
         {/* Legacy route for backward compatibility */}
         <Route
           path="/study/:documentId"
