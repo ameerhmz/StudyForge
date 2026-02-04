@@ -10,6 +10,9 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Trust proxy - required for express-rate-limit behind Render/reverse proxy
+app.set('trust proxy', 1);
+
 // Rate limiting middleware - prevent Ollama overload
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
