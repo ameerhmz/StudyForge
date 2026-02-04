@@ -21,24 +21,28 @@ const limiter = rateLimit({
 });
 
 // Middleware
-const allowedOrigins = [
-  'http://localhost:5173',
-  'http://localhost:3000',
-  'https://studyforge1-odra.vercel.app',
-  process.env.CLIENT_URL
-].filter(Boolean);
-
 app.use(cors({
   origin: function (origin, callback) {
     // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
 
-    if (allowedOrigins.indexOf(origin) !== -1) {
-      callback(null, true);
-    } else {
-      console.log('Blocked by CORS:', origin);
-      callback(new Error('Not allowed by CORS'));
+    // Allow all Vercel URLs (production and preview)
+    if (origin.includes('vercel.app')) {
+      return callback(null, true);
     }
+
+    // Allow localhost for development
+    if (origin.includes('localhost')) {
+      return callback(null, true);
+    }
+
+    // Allow custom CLIENT_URL from environment
+    if (process.env.CLIENT_URL && origin === process.env.CLIENT_URL) {
+      return callback(null, true);
+    }
+
+    console.log('Blocked by CORS:', origin);
+    callback(new Error('Not allowed by CORS'));
   },
   credentials: true, // Allow cookies
 }));
