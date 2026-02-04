@@ -217,7 +217,7 @@ export default function Dashboard() {
               className="grid grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6 mb-16"
             >
               {statCards.map((stat, i) => (
-                <div key={i} className="card card-hover p-6 stat-card">
+                <div key={i} className="card p-6">
                   <div className={cn(
                     "w-12 h-12 rounded-xl bg-gradient-to-br flex items-center justify-center mb-4",
                     stat.gradient
@@ -343,7 +343,7 @@ export default function Dashboard() {
               {/* Tabs (Upload PDF and Demo Topics only) */}
               <div className="flex gap-2 mb-6">
                 {[
-                  { id: 'upload', label: 'Upload PDF', icon: Upload },
+                  { id: 'upload', label: 'Upload Syllabus PDF', icon: Upload },
                   { id: 'demo', label: 'Demo Topics', icon: GraduationCap },
                 ].map((tab) => (
                   <button
