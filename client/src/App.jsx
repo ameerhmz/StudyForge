@@ -11,9 +11,13 @@ import StudentDetailView from './pages/StudentDetailView';
 import Settings from './pages/Settings';
 import ProtectedRoute from './components/ProtectedRoute';
 import useAuthStore from './store/useAuthStore';
+import useActivityTracker from './hooks/useActivityTracker';
 
 export default function App() {
   const { checkAuth } = useAuthStore();
+
+  // Start global activity tracking
+  useActivityTracker();
 
   useEffect(() => {
     checkAuth(); // Check authentication on app load
@@ -25,7 +29,7 @@ export default function App() {
         <Route path="/" element={<Landing />} />
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
-        
+
         {/* Protected Routes */}
         <Route
           path="/dashboard"
@@ -51,7 +55,7 @@ export default function App() {
             </ProtectedRoute>
           }
         />
-        
+
         {/* Settings Route */}
         <Route
           path="/settings"
@@ -61,7 +65,7 @@ export default function App() {
             </ProtectedRoute>
           }
         />
-        
+
         {/* Teacher-only Routes */}
         <Route
           path="/teacher"
@@ -79,7 +83,7 @@ export default function App() {
             </ProtectedRoute>
           }
         />
-        
+
         {/* Legacy route for backward compatibility */}
         <Route
           path="/study/:documentId"

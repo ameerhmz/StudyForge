@@ -46,6 +46,7 @@ import subjectsRoutes from './routes/subjects.js';
 import quizzesRoutes from './routes/quizzes.js';
 import flashcardsRoutes from './routes/flashcards.js';
 import analyticsRoutes from './routes/analytics.js';
+import activityRoutes from './routes/activity.js';
 
 app.use('/api/auth', authRoutes);
 app.use('/api/upload', uploadRoutes);
@@ -57,14 +58,15 @@ app.use('/api/subjects', subjectsRoutes);
 app.use('/api/quizzes', quizzesRoutes);
 app.use('/api/flashcards', flashcardsRoutes);
 app.use('/api/analytics', analyticsRoutes);
+app.use('/api/activity', activityRoutes);
 
 // Global error handler
 app.use((err, req, res, next) => {
   console.error('Error:', err.stack);
-  
+
   const statusCode = err.statusCode || 500;
   const message = err.message || 'Internal Server Error';
-  
+
   res.status(statusCode).json({
     error: {
       message,

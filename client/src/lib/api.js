@@ -21,20 +21,20 @@ export async function generateSyllabus(content, options = {}) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ content, stream: true })
     })
-    
+
     if (!response.ok) throw new Error('Failed to generate syllabus')
-    
+
     const reader = response.body.getReader()
     const decoder = new TextDecoder()
     let result = null
-    
+
     while (true) {
       const { done, value } = await reader.read()
       if (done) break
-      
+
       const chunk = decoder.decode(value)
       const lines = chunk.split('\n')
-      
+
       for (const line of lines) {
         if (line.startsWith('data: ')) {
           try {
@@ -151,6 +151,22 @@ export async function generateYouTubeQueries(topics, subject = '') {
 export async function checkHealth() {
   const { data } = await api.get('/health')
   return data
+}
+
+/**
+ * Track user activity (heartbeat)
+ */
+export async function trackActivity(seconds = 60) {
+  const { data } = await api.post('/activity/track', { seconds })
+  return data
+}
+
+/**
+ * Get activity stats
+ */
+export async function getActivityStats() {
+  const { data } = await api.get('/activity/stats')
+  return data.data
 }
 
 export default api

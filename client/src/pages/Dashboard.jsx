@@ -13,6 +13,7 @@ import { demoSubjects } from '../lib/demoData';
 import PDFUpload from '../components/PDFUpload';
 import TeacherUpgradeModal from '../components/TeacherUpgradeModal';
 import Analytics from '../components/Analytics';
+import ActivityHeatmap from '../components/ActivityHeatmap';
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -214,20 +215,24 @@ export default function Dashboard() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.1 }}
-              className="grid grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6 mb-16"
+              className="space-y-6 mb-16"
             >
-              {statCards.map((stat, i) => (
-                <div key={i} className="card card-hover p-6 stat-card">
-                  <div className={cn(
-                    "w-12 h-12 rounded-xl bg-gradient-to-br flex items-center justify-center mb-4",
-                    stat.gradient
-                  )}>
-                    <stat.icon className="w-5 h-5 text-white" />
+              <ActivityHeatmap />
+
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6">
+                {statCards.map((stat, i) => (
+                  <div key={i} className="card card-hover p-6 stat-card">
+                    <div className={cn(
+                      "w-12 h-12 rounded-xl bg-gradient-to-br flex items-center justify-center mb-4",
+                      stat.gradient
+                    )}>
+                      <stat.icon className="w-5 h-5 text-white" />
+                    </div>
+                    <div className="text-3xl font-bold text-white mb-1">{stat.value}</div>
+                    <div className="text-gray-400 text-sm">{stat.label}</div>
                   </div>
-                  <div className="text-3xl font-bold text-white mb-1">{stat.value}</div>
-                  <div className="text-gray-400 text-sm">{stat.label}</div>
-                </div>
-              ))}
+                ))}
+              </div>
             </motion.div>
 
             {/* Subjects Grid */}

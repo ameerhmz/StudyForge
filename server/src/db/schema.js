@@ -195,4 +195,13 @@ export const weakTopics = pgTable('weak_topics', {
     isResolved: boolean('is_resolved').default(false),
     createdAt: timestamp('created_at').defaultNow(),
 });
+// ==================== USER ACTIVITY ====================
+export const userActivity = pgTable('user_activity', {
+    id: uuid('id').defaultRandom().primaryKey(),
+    userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+    date: text('date').notNull(), // YYYY-MM-DD
+    totalSeconds: integer('total_seconds').default(0).notNull(),
+    createdAt: timestamp('created_at').defaultNow(),
+    updatedAt: timestamp('updated_at').defaultNow(),
+});
 
