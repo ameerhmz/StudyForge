@@ -28,17 +28,17 @@ app.use(cors({
 
     // Allow all Vercel URLs (production and preview)
     if (origin.includes('vercel.app')) {
-      return callback(null, true);
+      return callback(null, origin); // Return the actual origin, not true
     }
 
     // Allow localhost for development
     if (origin.includes('localhost')) {
-      return callback(null, true);
+      return callback(null, origin); // Return the actual origin, not true
     }
 
     // Allow custom CLIENT_URL from environment
     if (process.env.CLIENT_URL && origin === process.env.CLIENT_URL) {
-      return callback(null, true);
+      return callback(null, origin); // Return the actual origin, not true
     }
 
     console.log('Blocked by CORS:', origin);

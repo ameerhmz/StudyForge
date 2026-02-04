@@ -165,21 +165,7 @@ const useStore = create(
       
       // ===== Subject Actions =====
       addSubject: async (subject) => {
-        // Generate local ID first for immediate UI update
-        const localId = subject.id || crypto.randomUUID();
-        const newSubject = { 
-          ...subject, 
-          id: localId,
-          topics: subject.topics || [],
-          createdAt: new Date().toISOString()
-        };
-        
-        // Optimistic update
-        set((state) => ({
-          subjects: [...state.subjects, newSubject]
-        }));
-
-        // Sync to database
+        // Only create subject in backend, then update state with backend response
         try {
           const result = await api.post('/subjects', {
             name: subject.name,
@@ -188,22 +174,17 @@ const useStore = create(
             icon: subject.emoji,
             syllabusData: subject.syllabusData || (subject.topics?.length > 0 ? { units: [{ title: 'Topics', topics: subject.topics }] } : null),
           });
-          
           if (result.success && result.data) {
-            // Update with server ID
             set((state) => ({
-              subjects: state.subjects.map(s => 
-                s.id === localId ? { ...s, ...result.data, id: result.data.id } : s
-              )
+              subjects: [...state.subjects, result.data]
             }));
-            console.log('✅ Subject synced to database:', result.data.name);
+            console.log('✅ Subject created in database:', result.data.name);
             return result.data;
           }
         } catch (error) {
-          console.error('Failed to sync subject to database:', error);
-          // Keep local version
+          console.error('Failed to create subject:', error);
         }
-        return newSubject;
+        return null;
       },
       
       updateSubject: async (id, updates) => {
